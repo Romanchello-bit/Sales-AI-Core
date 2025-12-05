@@ -59,3 +59,28 @@ class Graph:
 
     def get_list(self):
         return self.adj_list
+
+    def check_connectivity(self, start_node_id):
+        """
+        Checks if all nodes are reachable from start_node_id using BFS.
+        Returns: (is_connected: bool, unreachable_nodes: list)
+        """
+        if start_node_id < 0 or start_node_id >= self.num_vertices:
+            return False, []
+
+        visited = set()
+        queue = [start_node_id]
+        visited.add(start_node_id)
+        
+        while queue:
+            u = queue.pop(0)
+            for v, weight in self.adj_list[u]:
+                if v not in visited:
+                    visited.add(v)
+                    queue.append(v)
+        
+        all_nodes = set(range(self.num_vertices))
+        unreachable = list(all_nodes - visited)
+        unreachable.sort()
+        
+        return (len(unreachable) == 0), unreachable
