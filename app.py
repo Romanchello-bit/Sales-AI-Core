@@ -360,365 +360,366 @@ def draw_graph(graph_data, current_node, predicted_path):
 
 # --- MAIN APP ---
 st.sidebar.title("🛠️ SellMe Control")
-app_mode = st.sidebar.selectbox("Mode", ["Sales Bot Demo", "🧪 Math Lab"])
+mode = st.sidebar.radio("Mode", ["🤖 Sales Bot CRM", "🧪 Math Lab"])
 
-if app_mode == "🧪 Math Lab":
+if mode == "🤖 Sales Bot CRM":
+    # --- SALES BOT DEMO (Moved & Indented) ---
+
+    # --- API KEY SETUP (Robust) ---
+    api_key = None
+    try:
+        # Try to get key from secrets (Cloud)
+        if "GOOGLE_API_KEY" in st.secrets:
+            api_key = st.secrets["GOOGLE_API_KEY"]
+    except:
+        # If secrets file is missing (Local run), just ignore and pass
+        pass
+
+    # Fallback to manual input if no key found yet
+    if not api_key:
+        api_key = st.sidebar.text_input("Google API Key", type="password")
+
+    if st.sidebar.button("📊 Dashboard"): st.session_state.page = "dashboard"; st.rerun()
+    if st.sidebar.button("📞 New Call"): st.session_state.page = "setup"; st.rerun()
+
+    if not api_key:
+        st.warning("🔑 Please enter API Key to start.")
+        st.stop()
+
+    configure_genai(api_key)
+    model = genai.GenerativeModel(MODEL_NAME)
+    graph_data = load_graph_data()
+    graph, node_to_id, id_to_node, nodes, edges = graph_data
+
+    # --- PAGE: DASHBOARD ---
+    if st.session_state.page == "dashboard":
+        st.title("📊 CRM & Analytics Hub")
+        
+        # Кнопка для запуску навчання
+        if st.button("🧠 Train AI on History (RL)"):
+            with st.spinner("Analyzing patterns... Updating weights..."):
+                msg = train_brain()
+            st.success(msg)
+        
+        data, stats = get_analytics()
+        
+        if data is not None and not data.empty:
+            # Метрики
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total Calls", stats["total"])
+            c2.metric("Success Rate", f"{stats['success_rate']}%")
+            c3.metric("AI Learning Iterations", "v1.2") # Фейкова метрика для краси
+            
+            st.divider()
+            
+            # Вибір дзвінка для детального аналізу
+            st.subheader("🕵️ Call Inspector")
+            
+            # Створюємо список для селектора: "Дата - Ім'я - Результат"
+            options = data.apply(lambda x: f"{x['Date']} | {x['Name']} ({x['Outcome']})", axis=1).tolist()
+            selected_option = st.selectbox("Select a call to review:", options)
+            
+            if selected_option:
+                # Знаходимо вибраний рядок
+                selected_row = data.iloc[options.index(selected_option)]
+                
+                with st.expander("📝 Full Transcript & Insights", expanded=True):
+                    st.markdown(f"**Client:** {selected_row['Name']} ({selected_row['Type']})")
+                    st.markdown(f"**Result:** {selected_row['Outcome']}")
+                    st.text_area("Transcript", str(selected_row.get("Transcript", "No transcript available")), height=300)
+                    
+                    if "AI Insights" in selected_row and selected_row["AI Insights"]:
+                        st.info(f"💡 **AI Insight:** {selected_row['AI Insights']}")
+                    else:
+                        st.warning("No insights generated for this call.")
+                        
+        else:
+            st.info("Database is empty. Make some calls!")
+
+    # --- PAGE: SETUP ---
+    elif st.session_state.page == "setup":
+        st.title("👤 Налаштування Дзвінка")
+        
+        with st.form("lead_form"):
+            st.markdown("### 👨‍💼 Хто дзвонить?")
+            bot_name = st.text_input("Ваше ім'я (Менеджера)", "Олексій")
+            
+            st.markdown("### 📞 Кому дзвонимо?")
+            c1, c2 = st.columns(2)
+            name = c1.text_input("Ім'я Клієнта", "Олександр")
+            company = c2.text_input("Компанія (для B2B)", "SoftServe")
+            
+            type_ = c1.selectbox("Тип бізнесу", ["B2B", "B2C"])
+            context = c2.selectbox("Контекст", ["Холодний дзвінок", "Теплий лід (заявка)", "Повторний дзвінок"])
+            
+            # --- ПЕРЕВІРКА ІСТОРІЇ ---
+            # Спробуємо знайти клієнта в базі (якщо підключено Google Sheets)
+            if st.checkbox("🔍 Перевірити в базі (за ім'ям)"):
+                try:
+                    # Це працює, якщо у нас є leads_manager з Google Sheets
+                    from leads_manager import connect_to_gsheet
+                    sheet = connect_to_gsheet()
+                    if sheet:
+                        records = sheet.get_all_records()
+                        found = [r for r in records if str(r['Name']).lower() == name.lower()]
+                        
+                        if found:
+                            last_interaction = found[-1] # Останній запис
+                            st.info(f"📜 Знайдено історію! Останній контакт: {last_interaction['Date']}")
+                            st.warning(f"Результат минулого разу: {last_interaction['Outcome']}")
+                            st.caption(f"Нотатки: {last_interaction.get('Summary', '')}")
+                            
+                            # Можна автоматично змінити контекст на "Повторний"
+                            context = "Повторний дзвінок" 
+                        else:
+                            st.success("✨ Новий клієнт")
+                except Exception as e:
+                    st.error("База даних недоступна.")
+            
+            submitted = st.form_submit_button("🚀 Почати розмову")
+            
+            if submitted:
+                # Зберігаємо все, включаючи ім'я бота
+                st.session_state.lead_info = {
+                    "bot_name": bot_name,
+                    "name": name,         # <--- ВИПРАВИЛИ НА "name"
+                    "company": company, 
+                    "type": type_, 
+                    "context": context
+                }
+                st.session_state.messages = []
+                st.session_state.current_node = "start"
+                st.session_state.checklist = {k:False for k in st.session_state.checklist}
+                st.session_state.page = "chat"
+                st.session_state.visited_history = []
+                st.rerun()
+
+    # --- PAGE: CHAT ---
+    elif st.session_state.page == "chat":
+        st.markdown(f"### Call with {st.session_state.lead_info['name']}")
+        
+        col_chat, col_tools = st.columns([1.5, 1])
+        
+        with col_tools:
+            st.markdown("#### 🎯 Call Objectives")
+            # Logic to auto-update checklist based on node
+            if "qualification" in st.session_state.current_node: st.session_state.checklist["Identify Customer"] = True
+            if "pain" in st.session_state.current_node or "shame" in st.session_state.current_node: st.session_state.checklist["Determine Objectives"] = True
+            if "pitch" in st.session_state.current_node: st.session_state.checklist["Outline Advantages"] = True
+            
+            for goal, done in st.session_state.checklist.items():
+                icon = "✅" if done else "⬜"
+                st.write(f"{icon} {goal}")
+            
+            # Display Client Profile (Real-time)
+            st.markdown("#### 🧠 Client Profile (Real-time)")
+            
+            # Get current archetype from session
+            current_archetype = st.session_state.get("current_archetype", "Analyzing...")
+            
+            # Visual cards for archetypes
+            cols = st.columns(4)
+            
+            # Styles for highlighting
+            def get_opacity(target): return "1.0" if current_archetype == target else "0.3"
+            
+            cols[0].markdown(f"<div style='opacity:{get_opacity('DRIVER')}; font-size:20px; text-align:center'>🔴<br>Boss</div>", unsafe_allow_html=True)
+            cols[1].markdown(f"<div style='opacity:{get_opacity('ANALYST')}; font-size:20px; text-align:center'>🔵<br>Analyst</div>", unsafe_allow_html=True)
+            cols[2].markdown(f"<div style='opacity:{get_opacity('EXPRESSIVE')}; font-size:20px; text-align:center'>🟡<br>Fan</div>", unsafe_allow_html=True)
+            cols[3].markdown(f"<div style='opacity:{get_opacity('CONSERVATIVE')}; font-size:20px; text-align:center'>🟢<br>Safe</div>", unsafe_allow_html=True)
+            
+            if st.session_state.reasoning:
+                st.caption(f"🤖 AI Insight: {st.session_state.reasoning}")
+                
+            st.markdown("#### 📊 AI Strategy")
+            curr_id = node_to_id[st.session_state.current_node]
+            target_id = node_to_id["close_standard"]
+            path = get_predicted_path(graph, curr_id, target_id, id_to_node, node_to_id)
+            st.graphviz_chart(
+                draw_graph(graph_data, st.session_state.current_node, path),
+                use_container_width=True  # Розтягує граф на всю ширину колонки
+            )
+            
+            # --- BELLMAN-FORD ALGORITHM LOGS ---
+            st.markdown("---")
+            with st.expander("🧮 Алгоритм Беллмана-Форда (Live Logs)", expanded=False):
+                st.markdown("""
+                **Математика прийняття рішень:**
+                Алгоритм шукає шлях $P$, де сума ваг $W$ є мінімальною:
+                $$ D[v] = \\min(D[v], D[u] + W(u, v)) $$
+                """)
+                
+                # 1. Calculate real data
+                visited_ids = [node_to_id[n] for n in st.session_state.get('visited_history', []) if n in node_to_id]
+                client_type = st.session_state.lead_info.get('type', 'B2B')
+                current_sentiment = st.session_state.get("current_sentiment", 0.0)
+                
+                # Call algorithm to get distance array
+                raw_dist = bellman_ford_list(
+                    graph, 
+                    curr_id, 
+                    visited_nodes=visited_ids, 
+                    client_type=client_type, 
+                    sentiment_score=current_sentiment
+                )
+                
+                # 2. Build beautiful table for humans
+                debug_data = []
+                target_path_set = set(path)  # Path we already found for graph
+                
+                for i, d in enumerate(raw_dist):
+                    node_name = id_to_node[i]
+                    
+                    # Format infinity
+                    cost_display = "∞" if d == float('inf') else round(d, 2)
+                    
+                    # Node status
+                    status = "⬜"
+                    if node_name == st.session_state.current_node: status = "📍 Start"
+                    elif node_name in target_path_set: status = "✨ Path"
+                    elif d == float('inf'): status = "🚫 Unreachable"
+                    
+                    debug_data.append({
+                        "Node": node_name,
+                        "Cost (Weight)": cost_display,
+                        "Status": status
+                    })
+                
+                # Convert to DataFrame
+                df_log = pd.DataFrame(debug_data)
+                
+                # Sort: path first, then cheap, then expensive
+                df_log["sort_key"] = df_log["Cost (Weight)"].apply(lambda x: 9999 if x == "∞" else float(x))
+                df_log = df_log.sort_values(by="sort_key").drop(columns=["sort_key"])
+                
+                # Display
+                st.dataframe(
+                    df_log, 
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+                # 3. Explanation "Why?"
+                st.info(f"""
+                **Фактори впливу:**
+                - 🎭 **Емоція:** {current_sentiment} (впливає на вартість агресивних кроків)
+                - 🏢 **Тип:** {client_type} (змінює пріоритет швидкості)
+                - 🔄 **Повтори:** Вузли, де ми вже були, мають штраф x50.
+                """)
+
+        with col_chat:
+            for msg in st.session_state.messages:
+                with st.chat_message(msg["role"]): st.write(msg["content"])
+                
+            # --- ГЕНЕРАЦІЯ ПЕРШОГО ПОВІДОМЛЕННЯ ---
+            if not st.session_state.messages:
+                with st.spinner("AI готується до дзвінка..."):
+                    # Викликаємо AI для генерації живого привітання
+                    greeting = generate_greeting(model, nodes["start"], st.session_state.lead_info)
+                    
+                st.session_state.messages.append({"role": "assistant", "content": greeting})
+                st.rerun()
+
+            if user_input := st.chat_input("Reply..."):
+                st.session_state.messages.append({"role": "user", "content": user_input})
+                
+                # Logic - Analyze with full context including archetype detection
+                current_text = nodes[st.session_state.current_node]
+                analysis = analyze_full_context(model, user_input, st.session_state.current_node, st.session_state.messages)
+                intent = analysis.get("intent", "STAY")
+                archetype = analysis.get("archetype", "UNKNOWN")
+                reasoning = analysis.get("reasoning", "")
+                
+                # Store archetype and reasoning for display
+                st.session_state.current_archetype = archetype
+                st.session_state.reasoning = reasoning
+                
+                if "EXIT" in intent:
+                    outcome = "Success" if "close" in st.session_state.current_node else "Fail"
+                    save_lead_to_db(st.session_state.lead_info, st.session_state.messages, outcome)
+                    st.success("Call Saved!")
+                    st.session_state.page = "dashboard"; st.rerun()
+                
+                elif "STAY" in intent:
+                    resp = generate_response(model, current_text, user_input, "STAY", st.session_state.lead_info, archetype)
+                
+                else: # MOVE
+                    # Track current node in visited history before moving
+                    if st.session_state.current_node not in st.session_state.visited_history:
+                        st.session_state.visited_history.append(st.session_state.current_node)
+                    
+                    curr_id = node_to_id[st.session_state.current_node]
+                    best_next = None; min_w = float('inf')
+                    for n, w in graph.adj_list[curr_id]:
+                        if w < min_w: min_w = w; best_next = n
+                    
+                    if best_next is not None:
+                        st.session_state.current_node = id_to_node[best_next]
+                        new_text = nodes[st.session_state.current_node]
+                        resp = generate_response(model, new_text, user_input, "MOVE", st.session_state.lead_info, archetype)
+                    else:
+                        resp = "Call finished."
+                        save_lead_to_db(st.session_state.lead_info, st.session_state.messages, "End of Script")
+
+                st.session_state.messages.append({"role": "assistant", "content": resp})
+                st.rerun()
+
+elif mode == "🧪 Math Lab":
     st.title("🧪 Computational Math Lab")
     
-    tab1, tab2 = st.tabs(["🎲 Random Graph", "⚡ Performance"])
+    st.markdown("### Section A: Graph Inspector")
+    col1, col2 = st.columns(2)
+    n_nodes = col1.slider("N (Vertices)", 5, 15, 10)
+    density = col2.slider("Density", 0.1, 1.0, 0.5)
     
-    with tab1:
-        st.header("Random Graph Generation (Erdős-Rényi)")
-        c1, c2 = st.columns(2)
-        n = c1.slider("Number of Vertices (N)", 5, 50, 10, step=5)
-        density = c2.slider("Edge Density", 0.1, 1.0, 0.3)
+    if st.button("Generate Graph"):
+         # Generate graph using experiments module
+         graph = experiments.generate_erdos_renyi(n_nodes, density)
+         st.session_state.lab_graph = graph
+    
+    # Display if graph exists in session state
+    if 'lab_graph' in st.session_state:
+        graph = st.session_state.lab_graph
         
-        if st.button("Generate Graph"):
-            # Generate
-            graph = experiments.generate_random_graph(n, density)
-            
-            # Show Adjacency Matrix
-            st.subheader("Adjacency Matrix")
-            matrix = graph.to_adjacency_matrix()
-            # Convert float('inf') to string "∞" for display
-            display_matrix = [[("∞" if x == float('inf') else x) for x in row] for row in matrix]
-            df_matrix = pd.DataFrame(display_matrix)
-            st.dataframe(df_matrix)
-            
-            # Show Graphviz
-            st.subheader("Visual Representation")
-            # We can reuse draw_graph but need to adapt arguments roughly
-            # Creating a fake structure to reuse draw_graph or just drawing simple one here.
-            # draw_graph expects (graph, node_to_id, id_to_node, nodes, edges) tuple + current_node + path
-            
+        tab1, tab2, tab3 = st.tabs(["Visual Graph", "Adjacency Matrix", "Adjacency List"])
+        
+        with tab1:
+            st.subheader("Graphviz Visualization")
             dot = graphviz.Digraph()
-            dot.attr(rankdir='LR')
-            for i in range(graph.num_vertices):
-                dot.node(str(i), label=f"Node {i}")
-            
+            # Basic Graphviz from graph.adj_list
             for u, neighbors in graph.adj_list.items():
+                dot.node(str(u), label=str(u))
                 for v, w in neighbors:
                     dot.edge(str(u), str(v), label=str(w))
-            
             st.graphviz_chart(dot)
-
-    with tab2:
-        st.header("Algorithm Benchmarking")
-        st.markdown("**Algorithm:** Bellman-Ford (Adjacency List)")
-        st.markdown("**Theoretical Complexity:** $O(V \\cdot E)$")
-        
-        bench_density = st.slider("Benchmark Density", 0.1, 1.0, 0.5)
-        if st.button("Run Benchmarks 🚀"):
-            with st.spinner("Running experiments..."):
-                sizes = [10, 50, 100, 200]
-                results = experiments.run_benchmark(sizes, bench_density)
             
-            # Results
-            df_res = pd.DataFrame(results, columns=["Vertices", "Time (seconds)"])
-            st.table(df_res)
+        with tab2:
+            st.subheader("Adjacency Matrix")
+            # Reuse logic to show infinity as string
+            matrix = graph.to_adjacency_matrix()
+            display_matrix = [[("∞" if x == float('inf') else x) for x in row] for row in matrix]
+            st.dataframe(pd.DataFrame(display_matrix))
             
-            # Chart
-            st.line_chart(df_res.set_index("Vertices")["Time (seconds)"])
+        with tab3:
+            st.subheader("Adjacency List")
+            st.write(graph.adj_list)
             
-    st.stop() # Stop here so we don't render the Sales Bot Demo
-
-# --- SALES BOT DEMO CONTINUES BELOW ---
-
-# --- API KEY SETUP (Robust) ---
-api_key = None
-try:
-    # Try to get key from secrets (Cloud)
-    if "GOOGLE_API_KEY" in st.secrets:
-        api_key = st.secrets["GOOGLE_API_KEY"]
-except:
-    # If secrets file is missing (Local run), just ignore and pass
-    pass
-
-# Fallback to manual input if no key found yet
-if not api_key:
-    api_key = st.sidebar.text_input("Google API Key", type="password")
-
-if st.sidebar.button("📊 Dashboard"): st.session_state.page = "dashboard"; st.rerun()
-if st.sidebar.button("📞 New Call"): st.session_state.page = "setup"; st.rerun()
-
-if not api_key:
-    st.warning("🔑 Please enter API Key to start.")
-    st.stop()
-
-configure_genai(api_key)
-model = genai.GenerativeModel(MODEL_NAME)
-graph_data = load_graph_data()
-graph, node_to_id, id_to_node, nodes, edges = graph_data
-
-# --- PAGE: DASHBOARD ---
-if st.session_state.page == "dashboard":
-    st.title("📊 CRM & Analytics Hub")
+    st.divider()
     
-    # Кнопка для запуску навчання
-    if st.button("🧠 Train AI on History (RL)"):
-        with st.spinner("Analyzing patterns... Updating weights..."):
-            msg = train_brain()
-        st.success(msg)
+    st.markdown("### Section B: Experiments")
+    sizes = st.multiselect("Sizes", [10, 50, 100], default=[10, 50, 100])
+    bench_density = st.slider("Benchmark Density", 0.1, 1.0, 0.5, key="bench_density")
     
-    data, stats = get_analytics()
-    
-    if data is not None and not data.empty:
-        # Метрики
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total Calls", stats["total"])
-        c2.metric("Success Rate", f"{stats['success_rate']}%")
-        c3.metric("AI Learning Iterations", "v1.2") # Фейкова метрика для краси
-        
-        st.divider()
-        
-        # Вибір дзвінка для детального аналізу
-        st.subheader("🕵️ Call Inspector")
-        
-        # Створюємо список для селектора: "Дата - Ім'я - Результат"
-        options = data.apply(lambda x: f"{x['Date']} | {x['Name']} ({x['Outcome']})", axis=1).tolist()
-        selected_option = st.selectbox("Select a call to review:", options)
-        
-        if selected_option:
-            # Знаходимо вибраний рядок
-            selected_row = data.iloc[options.index(selected_option)]
+    if st.button("🚀 Run Benchmarks"):
+        with st.spinner("Running scientific benchmarks..."):
+            # Execute run_scientific_benchmark from experiments.py
+            results = experiments.run_scientific_benchmark(sizes, [bench_density])
             
-            with st.expander("📝 Full Transcript & Insights", expanded=True):
-                st.markdown(f"**Client:** {selected_row['Name']} ({selected_row['Type']})")
-                st.markdown(f"**Result:** {selected_row['Outcome']}")
-                st.text_area("Transcript", str(selected_row.get("Transcript", "No transcript available")), height=300)
-                
-                if "AI Insights" in selected_row and selected_row["AI Insights"]:
-                    st.info(f"💡 **AI Insight:** {selected_row['AI Insights']}")
-                else:
-                    st.warning("No insights generated for this call.")
-                    
-    else:
-        st.info("Database is empty. Make some calls!")
-
-# --- PAGE: SETUP ---
-elif st.session_state.page == "setup":
-    st.title("👤 Налаштування Дзвінка")
-    
-    with st.form("lead_form"):
-        st.markdown("### 👨‍💼 Хто дзвонить?")
-        bot_name = st.text_input("Ваше ім'я (Менеджера)", "Олексій")
-        
-        st.markdown("### 📞 Кому дзвонимо?")
-        c1, c2 = st.columns(2)
-        name = c1.text_input("Ім'я Клієнта", "Олександр")
-        company = c2.text_input("Компанія (для B2B)", "SoftServe")
-        
-        type_ = c1.selectbox("Тип бізнесу", ["B2B", "B2C"])
-        context = c2.selectbox("Контекст", ["Холодний дзвінок", "Теплий лід (заявка)", "Повторний дзвінок"])
-        
-        # --- ПЕРЕВІРКА ІСТОРІЇ ---
-        # Спробуємо знайти клієнта в базі (якщо підключено Google Sheets)
-        if st.checkbox("🔍 Перевірити в базі (за ім'ям)"):
-            try:
-                # Це працює, якщо у нас є leads_manager з Google Sheets
-                from leads_manager import connect_to_gsheet
-                sheet = connect_to_gsheet()
-                if sheet:
-                    records = sheet.get_all_records()
-                    found = [r for r in records if str(r['Name']).lower() == name.lower()]
-                    
-                    if found:
-                        last_interaction = found[-1] # Останній запис
-                        st.info(f"📜 Знайдено історію! Останній контакт: {last_interaction['Date']}")
-                        st.warning(f"Результат минулого разу: {last_interaction['Outcome']}")
-                        st.caption(f"Нотатки: {last_interaction.get('Summary', '')}")
-                        
-                        # Можна автоматично змінити контекст на "Повторний"
-                        context = "Повторний дзвінок" 
-                    else:
-                        st.success("✨ Новий клієнт")
-            except Exception as e:
-                st.error("База даних недоступна.")
-        
-        submitted = st.form_submit_button("🚀 Почати розмову")
-        
-        if submitted:
-            # Зберігаємо все, включаючи ім'я бота
-            st.session_state.lead_info = {
-                "bot_name": bot_name,
-                "name": name,         # <--- ВИПРАВИЛИ НА "name"
-                "company": company, 
-                "type": type_, 
-                "context": context
-            }
-            st.session_state.messages = []
-            st.session_state.current_node = "start"
-            st.session_state.checklist = {k:False for k in st.session_state.checklist}
-            st.session_state.page = "chat"
-            st.session_state.visited_history = []
-            st.rerun()
-
-# --- PAGE: CHAT ---
-elif st.session_state.page == "chat":
-    st.markdown(f"### Call with {st.session_state.lead_info['name']}")
-    
-    col_chat, col_tools = st.columns([1.5, 1])
-    
-    with col_tools:
-        st.markdown("#### 🎯 Call Objectives")
-        # Logic to auto-update checklist based on node
-        if "qualification" in st.session_state.current_node: st.session_state.checklist["Identify Customer"] = True
-        if "pain" in st.session_state.current_node or "shame" in st.session_state.current_node: st.session_state.checklist["Determine Objectives"] = True
-        if "pitch" in st.session_state.current_node: st.session_state.checklist["Outline Advantages"] = True
-        
-        for goal, done in st.session_state.checklist.items():
-            icon = "✅" if done else "⬜"
-            st.write(f"{icon} {goal}")
-        
-        # Display Client Profile (Real-time)
-        st.markdown("#### 🧠 Client Profile (Real-time)")
-        
-        # Get current archetype from session
-        current_archetype = st.session_state.get("current_archetype", "Analyzing...")
-        
-        # Visual cards for archetypes
-        cols = st.columns(4)
-        
-        # Styles for highlighting
-        def get_opacity(target): return "1.0" if current_archetype == target else "0.3"
-        
-        cols[0].markdown(f"<div style='opacity:{get_opacity('DRIVER')}; font-size:20px; text-align:center'>🔴<br>Boss</div>", unsafe_allow_html=True)
-        cols[1].markdown(f"<div style='opacity:{get_opacity('ANALYST')}; font-size:20px; text-align:center'>🔵<br>Analyst</div>", unsafe_allow_html=True)
-        cols[2].markdown(f"<div style='opacity:{get_opacity('EXPRESSIVE')}; font-size:20px; text-align:center'>🟡<br>Fan</div>", unsafe_allow_html=True)
-        cols[3].markdown(f"<div style='opacity:{get_opacity('CONSERVATIVE')}; font-size:20px; text-align:center'>🟢<br>Safe</div>", unsafe_allow_html=True)
-        
-        if st.session_state.reasoning:
-            st.caption(f"🤖 AI Insight: {st.session_state.reasoning}")
+            # Show Results Table
+            df_results = pd.DataFrame(results)
+            st.table(df_results)
             
-        st.markdown("#### 📊 AI Strategy")
-        curr_id = node_to_id[st.session_state.current_node]
-        target_id = node_to_id["close_standard"]
-        path = get_predicted_path(graph, curr_id, target_id, id_to_node, node_to_id)
-        st.graphviz_chart(
-            draw_graph(graph_data, st.session_state.current_node, path),
-            use_container_width=True  # Розтягує граф на всю ширину колонки
-        )
-        
-        # --- BELLMAN-FORD ALGORITHM LOGS ---
-        st.markdown("---")
-        with st.expander("🧮 Алгоритм Беллмана-Форда (Live Logs)", expanded=False):
-            st.markdown("""
-            **Математика прийняття рішень:**
-            Алгоритм шукає шлях $P$, де сума ваг $W$ є мінімальною:
-            $$ D[v] = \\min(D[v], D[u] + W(u, v)) $$
-            """)
-            
-            # 1. Calculate real data
-            visited_ids = [node_to_id[n] for n in st.session_state.get('visited_history', []) if n in node_to_id]
-            client_type = st.session_state.lead_info.get('type', 'B2B')
-            current_sentiment = st.session_state.get("current_sentiment", 0.0)
-            
-            # Call algorithm to get distance array
-            raw_dist = bellman_ford_list(
-                graph, 
-                curr_id, 
-                visited_nodes=visited_ids, 
-                client_type=client_type, 
-                sentiment_score=current_sentiment
-            )
-            
-            # 2. Build beautiful table for humans
-            debug_data = []
-            target_path_set = set(path)  # Path we already found for graph
-            
-            for i, d in enumerate(raw_dist):
-                node_name = id_to_node[i]
-                
-                # Format infinity
-                cost_display = "∞" if d == float('inf') else round(d, 2)
-                
-                # Node status
-                status = "⬜"
-                if node_name == st.session_state.current_node: status = "📍 Start"
-                elif node_name in target_path_set: status = "✨ Path"
-                elif d == float('inf'): status = "🚫 Unreachable"
-                
-                debug_data.append({
-                    "Node": node_name,
-                    "Cost (Weight)": cost_display,
-                    "Status": status
-                })
-            
-            # Convert to DataFrame
-            df_log = pd.DataFrame(debug_data)
-            
-            # Sort: path first, then cheap, then expensive
-            df_log["sort_key"] = df_log["Cost (Weight)"].apply(lambda x: 9999 if x == "∞" else float(x))
-            df_log = df_log.sort_values(by="sort_key").drop(columns=["sort_key"])
-            
-            # Display
-            st.dataframe(
-                df_log, 
-                use_container_width=True,
-                hide_index=True
-            )
-            
-            # 3. Explanation "Why?"
-            st.info(f"""
-            **Фактори впливу:**
-            - 🎭 **Емоція:** {current_sentiment} (впливає на вартість агресивних кроків)
-            - 🏢 **Тип:** {client_type} (змінює пріоритет швидкості)
-            - 🔄 **Повтори:** Вузли, де ми вже були, мають штраф x50.
-            """)
-
-    with col_chat:
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]): st.write(msg["content"])
-            
-        # --- ГЕНЕРАЦІЯ ПЕРШОГО ПОВІДОМЛЕННЯ ---
-        if not st.session_state.messages:
-            with st.spinner("AI готується до дзвінка..."):
-                # Викликаємо AI для генерації живого привітання
-                greeting = generate_greeting(model, nodes["start"], st.session_state.lead_info)
-                
-            st.session_state.messages.append({"role": "assistant", "content": greeting})
-            st.rerun()
-
-        if user_input := st.chat_input("Reply..."):
-            st.session_state.messages.append({"role": "user", "content": user_input})
-            
-            # Logic - Analyze with full context including archetype detection
-            current_text = nodes[st.session_state.current_node]
-            analysis = analyze_full_context(model, user_input, st.session_state.current_node, st.session_state.messages)
-            intent = analysis.get("intent", "STAY")
-            archetype = analysis.get("archetype", "UNKNOWN")
-            reasoning = analysis.get("reasoning", "")
-            
-            # Store archetype and reasoning for display
-            st.session_state.current_archetype = archetype
-            st.session_state.reasoning = reasoning
-            
-            if "EXIT" in intent:
-                outcome = "Success" if "close" in st.session_state.current_node else "Fail"
-                save_lead_to_db(st.session_state.lead_info, st.session_state.messages, outcome)
-                st.success("Call Saved!")
-                st.session_state.page = "dashboard"; st.rerun()
-            
-            elif "STAY" in intent:
-                resp = generate_response(model, current_text, user_input, "STAY", st.session_state.lead_info, archetype)
-            
-            else: # MOVE
-                # Track current node in visited history before moving
-                if st.session_state.current_node not in st.session_state.visited_history:
-                    st.session_state.visited_history.append(st.session_state.current_node)
-                
-                curr_id = node_to_id[st.session_state.current_node]
-                best_next = None; min_w = float('inf')
-                for n, w in graph.adj_list[curr_id]:
-                    if w < min_w: min_w = w; best_next = n
-                
-                if best_next is not None:
-                    st.session_state.current_node = id_to_node[best_next]
-                    new_text = nodes[st.session_state.current_node]
-                    resp = generate_response(model, new_text, user_input, "MOVE", st.session_state.lead_info, archetype)
-                else:
-                    resp = "Call finished."
-                    save_lead_to_db(st.session_state.lead_info, st.session_state.messages, "End of Script")
-
-            st.session_state.messages.append({"role": "assistant", "content": resp})
-            st.rerun()
+            # Plot Line Chart (X=N, Y=Avg_Time)
+            if not df_results.empty:
+                chart_data = df_results.set_index("Vertices (N)")["Avg_Time_Sec"]
+                st.line_chart(chart_data)
