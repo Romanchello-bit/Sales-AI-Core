@@ -104,7 +104,7 @@ def main():
     
     # Configure Gemini
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-pro')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
     print("\n[INFO] Gemini configured successfully!")
     print("[INFO] Loading sales script...\n")
