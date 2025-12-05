@@ -222,8 +222,8 @@ try:
     # Try to get key from secrets (Cloud)
     if "GOOGLE_API_KEY" in st.secrets:
         api_key = st.secrets["GOOGLE_API_KEY"]
-except (FileNotFoundError, KeyError):
-    # Secrets not found (Local run) -> Do nothing, stay None
+except:
+    # If secrets file is missing (Local run), just ignore and pass
     pass
 
 # Fallback to manual input if no key found yet
