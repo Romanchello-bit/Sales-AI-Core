@@ -3,11 +3,13 @@ import graphviz
 import json
 import os
 import pandas as pd
+import time
 from datetime import datetime
 import google.generativeai as genai
 from graph_module import Graph
 from algorithms import bellman_ford_list
 from leads_manager import get_analytics
+import experiments
 
 # --- CONFIG ---
 st.set_page_config(layout="wide", page_title="SellMe AI Engine")
@@ -358,6 +360,69 @@ def draw_graph(graph_data, current_node, predicted_path):
 
 # --- MAIN APP ---
 st.sidebar.title("🛠️ SellMe Control")
+app_mode = st.sidebar.selectbox("Mode", ["Sales Bot Demo", "🧪 Math Lab"])
+
+if app_mode == "🧪 Math Lab":
+    st.title("🧪 Computational Math Lab")
+    
+    tab1, tab2 = st.tabs(["🎲 Random Graph", "⚡ Performance"])
+    
+    with tab1:
+        st.header("Random Graph Generation (Erdős-Rényi)")
+        c1, c2 = st.columns(2)
+        n = c1.slider("Number of Vertices (N)", 5, 50, 10, step=5)
+        density = c2.slider("Edge Density", 0.1, 1.0, 0.3)
+        
+        if st.button("Generate Graph"):
+            # Generate
+            graph = experiments.generate_random_graph(n, density)
+            
+            # Show Adjacency Matrix
+            st.subheader("Adjacency Matrix")
+            matrix = graph.to_adjacency_matrix()
+            # Convert float('inf') to string "∞" for display
+            display_matrix = [[("∞" if x == float('inf') else x) for x in row] for row in matrix]
+            df_matrix = pd.DataFrame(display_matrix)
+            st.dataframe(df_matrix)
+            
+            # Show Graphviz
+            st.subheader("Visual Representation")
+            # We can reuse draw_graph but need to adapt arguments roughly
+            # Creating a fake structure to reuse draw_graph or just drawing simple one here.
+            # draw_graph expects (graph, node_to_id, id_to_node, nodes, edges) tuple + current_node + path
+            
+            dot = graphviz.Digraph()
+            dot.attr(rankdir='LR')
+            for i in range(graph.num_vertices):
+                dot.node(str(i), label=f"Node {i}")
+            
+            for u, neighbors in graph.adj_list.items():
+                for v, w in neighbors:
+                    dot.edge(str(u), str(v), label=str(w))
+            
+            st.graphviz_chart(dot)
+
+    with tab2:
+        st.header("Algorithm Benchmarking")
+        st.markdown("**Algorithm:** Bellman-Ford (Adjacency List)")
+        st.markdown("**Theoretical Complexity:** $O(V \\cdot E)$")
+        
+        bench_density = st.slider("Benchmark Density", 0.1, 1.0, 0.5)
+        if st.button("Run Benchmarks 🚀"):
+            with st.spinner("Running experiments..."):
+                sizes = [10, 50, 100, 200]
+                results = experiments.run_benchmark(sizes, bench_density)
+            
+            # Results
+            df_res = pd.DataFrame(results, columns=["Vertices", "Time (seconds)"])
+            st.table(df_res)
+            
+            # Chart
+            st.line_chart(df_res.set_index("Vertices")["Time (seconds)"])
+            
+    st.stop() # Stop here so we don't render the Sales Bot Demo
+
+# --- SALES BOT DEMO CONTINUES BELOW ---
 
 # --- API KEY SETUP (Robust) ---
 api_key = None
