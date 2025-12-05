@@ -1,10 +1,11 @@
-def bellman_ford_list(graph, start_node, visited_nodes=None, client_type="B2B"):
+def bellman_ford_list(graph, start_node, visited_nodes=None, client_type="B2B", sentiment_score=0.0):
     """
     Advanced Bellman-Ford Algorithm.
     
     Features:
     1. Dynamic Weights based on Client Type (B2B prefers logic, B2C prefers speed).
     2. Penalty for re-visiting nodes (avoid loops).
+    3. Sentiment adjustment (-1 angry to +1 happy affects aggressive paths).
     """
     
     # Ініціалізація
@@ -19,6 +20,9 @@ def bellman_ford_list(graph, start_node, visited_nodes=None, client_type="B2B"):
         "B2C": {"logic": 1.5, "emotion": 0.7, "speed": 0.5}
     }
     modifiers = type_modifier.get(client_type, {"logic": 1.0, "emotion": 1.0, "speed": 1.0})
+    
+    # Sentiment modifier: negative sentiment increases costs, positive decreases
+    sentiment_factor = 1.0 - (sentiment_score * 0.3)  # Range: 0.7 (happy) to 1.3 (angry)
 
     # Основний цикл релаксації
     for _ in range(num_vertices - 1):
@@ -26,9 +30,7 @@ def bellman_ford_list(graph, start_node, visited_nodes=None, client_type="B2B"):
             for v, weight in graph.adj_list[u]:
                 
                 # --- ПОКРАЩЕННЯ 1: Динамічна вага ---
-                # Тут можна було б перевіряти тип ребра, якби він був у графі.
-                # Поки що просто емулюємо:
-                current_weight = weight
+                current_weight = weight * sentiment_factor
                 
                 # --- ПОКРАЩЕННЯ 2: Штраф за повторення ---
                 if visited_nodes and v in visited_nodes:

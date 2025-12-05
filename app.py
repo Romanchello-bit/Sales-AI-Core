@@ -21,6 +21,7 @@ if "lead_info" not in st.session_state: st.session_state.lead_info = {}
 if "visited_history" not in st.session_state: st.session_state.visited_history = []  # Track visited nodes
 if "current_archetype" not in st.session_state: st.session_state.current_archetype = "UNKNOWN"
 if "reasoning" not in st.session_state: st.session_state.reasoning = ""
+if "current_sentiment" not in st.session_state: st.session_state.current_sentiment = 0.0
 # Checklist status based on your screenshot
 if "checklist" not in st.session_state:
     st.session_state.checklist = {
@@ -361,6 +362,73 @@ elif st.session_state.page == "chat":
             draw_graph(graph_data, st.session_state.current_node, path),
             use_container_width=True  # Розтягує граф на всю ширину колонки
         )
+        
+        # --- BELLMAN-FORD ALGORITHM LOGS ---
+        st.markdown("---")
+        with st.expander("🧮 Алгоритм Беллмана-Форда (Live Logs)", expanded=False):
+            st.markdown("""
+            **Математика прийняття рішень:**
+            Алгоритм шукає шлях $P$, де сума ваг $W$ є мінімальною:
+            $$ D[v] = \\min(D[v], D[u] + W(u, v)) $$
+            """)
+            
+            # 1. Calculate real data
+            visited_ids = [node_to_id[n] for n in st.session_state.get('visited_history', []) if n in node_to_id]
+            client_type = st.session_state.lead_info.get('type', 'B2B')
+            current_sentiment = st.session_state.get("current_sentiment", 0.0)
+            
+            # Call algorithm to get distance array
+            raw_dist = bellman_ford_list(
+                graph, 
+                curr_id, 
+                visited_nodes=visited_ids, 
+                client_type=client_type, 
+                sentiment_score=current_sentiment
+            )
+            
+            # 2. Build beautiful table for humans
+            debug_data = []
+            target_path_set = set(path)  # Path we already found for graph
+            
+            for i, d in enumerate(raw_dist):
+                node_name = id_to_node[i]
+                
+                # Format infinity
+                cost_display = "∞" if d == float('inf') else round(d, 2)
+                
+                # Node status
+                status = "⬜"
+                if node_name == st.session_state.current_node: status = "📍 Start"
+                elif node_name in target_path_set: status = "✨ Path"
+                elif d == float('inf'): status = "🚫 Unreachable"
+                
+                debug_data.append({
+                    "Node": node_name,
+                    "Cost (Weight)": cost_display,
+                    "Status": status
+                })
+            
+            # Convert to DataFrame
+            df_log = pd.DataFrame(debug_data)
+            
+            # Sort: path first, then cheap, then expensive
+            df_log["sort_key"] = df_log["Cost (Weight)"].apply(lambda x: 9999 if x == "∞" else float(x))
+            df_log = df_log.sort_values(by="sort_key").drop(columns=["sort_key"])
+            
+            # Display
+            st.dataframe(
+                df_log, 
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            # 3. Explanation "Why?"
+            st.info(f"""
+            **Фактори впливу:**
+            - 🎭 **Емоція:** {current_sentiment} (впливає на вартість агресивних кроків)
+            - 🏢 **Тип:** {client_type} (змінює пріоритет швидкості)
+            - 🔄 **Повтори:** Вузли, де ми вже були, мають штраф x50.
+            """)
 
     with col_chat:
         for msg in st.session_state.messages:
