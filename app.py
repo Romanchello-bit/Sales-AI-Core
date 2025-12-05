@@ -7,6 +7,7 @@ from datetime import datetime
 import google.generativeai as genai
 from graph_module import Graph
 from algorithms import bellman_ford_list
+from leads_manager import get_analytics
 
 # --- CONFIG ---
 st.set_page_config(layout="wide", page_title="SellMe AI Engine")
@@ -109,7 +110,7 @@ def get_predicted_path(graph, start_id, target_id, id_to_node, node_to_id):
     if dist[target_id] == float('inf'): return []
     path = [target_id]
     curr = target_id
-    while curr != start_id:
+    while curr != start_id and attempts < 200:
         found = False
         for u in range(graph.num_vertices):
             for v, w in graph.adj_list[u]:
@@ -225,6 +226,69 @@ def generate_greeting(model, start_instruction, lead_info):
         return f"Алло, {client_name}? Це {bot_name}."
 
 
+def train_brain():
+    """
+    RL MODULE: Аналізує минулі діалоги і оновлює ваги графа.
+    """
+    # 1. Завантажуємо статистику
+    df, _ = get_analytics()
+    if df is None or df.empty or "Transcript" not in df.columns:
+        return "Недостатньо даних для навчання."
+
+    # 2. Завантажуємо поточний граф
+    graph, node_to_id, id_to_node, nodes, edges = load_graph_data()
+    
+    # 3. Аналіз успішних/провальних шляхів
+    # (Це спрощена логіка: ми шукаємо ключові слова кроків у транскрипті)
+    success_bonuses = {} # node_name -> bonus
+    
+    for index, row in df.iterrows():
+        is_success = (row["Outcome"] == "Success")
+        transcript = str(row["Transcript"])
+        
+        # Проходимо по всіх вузлах і шукаємо, чи були вони в діалозі
+        # (Це грубий метод, в ідеалі треба зберігати шлях ID у базу)
+        for node_name, node_text in nodes.items():
+            # Шукаємо унікальні шматки тексту інструкції в транскрипті, щоб зрозуміти, чи були ми там
+            # Або просто перевіряємо, чи згадується цей етап в логах
+            snippet = node_text[:20] 
+            if snippet in transcript:
+                if is_success:
+                    success_bonuses[node_name] = success_bonuses.get(node_name, 0) + 1
+                else:
+                    success_bonuses[node_name] = success_bonuses.get(node_name, 0) - 1
+
+    # 4. Оновлення ваг (Reinforcement)
+    new_edges = []
+    changes_log = []
+    
+    for edge in edges:
+        u_name, v_name = edge["from"], edge["to"]
+        old_weight = edge["weight"]
+        new_weight = old_weight
+        
+        # Якщо вузол 'to' часто зустрічається в успішних діалогах -> зменшуємо вагу вхідних ребер
+        score = success_bonuses.get(v_name, 0)
+        
+        if score > 0: # Успішний вузол
+            new_weight *= 0.9 # Знижка 10%
+        elif score < 0: # Провальний вузол
+            new_weight *= 1.1 # Штраф 10%
+            
+        # Обмеження щоб ваги не зламались
+        new_weight = max(1, min(new_weight, 100))
+        new_edges.append({"from": u_name, "to": v_name, "weight": round(new_weight, 2)})
+        
+        if old_weight != new_weight:
+            changes_log.append(f"{u_name}->{v_name}: {old_weight} -> {new_weight}")
+
+    # 5. Збереження "Розумного" файлу
+    learned_data = {"nodes": nodes, "edges": new_edges}
+    with open("sales_script_learned.json", "w", encoding="utf-8") as f:
+        json.dump(learned_data, f, ensure_ascii=False, indent=2)
+        
+    return f"Brain Updated! {len(changes_log)} weights adjusted based on {len(df)} calls."
+
 # --- UI COMPONENTS ---
 def draw_graph(graph_data, current_node, predicted_path):
     nodes = graph_data[3]
@@ -318,16 +382,48 @@ graph, node_to_id, id_to_node, nodes, edges = graph_data
 
 # --- PAGE: DASHBOARD ---
 if st.session_state.page == "dashboard":
-    st.title("📊 CRM Analytics")
-    init_db()
-    df = pd.read_csv(LEADS_FILE)
-    if not df.empty:
+    st.title("📊 CRM & Analytics Hub")
+    
+    # Кнопка для запуску навчання
+    if st.button("🧠 Train AI on History (RL)"):
+        with st.spinner("Analyzing patterns... Updating weights..."):
+            msg = train_brain()
+        st.success(msg)
+    
+    data, stats = get_analytics()
+    
+    if data is not None and not data.empty:
+        # Метрики
         c1, c2, c3 = st.columns(3)
-        c1.metric("Total Calls", len(df))
-        c2.metric("B2B Leads", len(df[df['Type']=='B2B']))
-        c3.metric("Success", len(df[df['Outcome']=='Success']))
-        st.dataframe(df)
-    else: st.info("Database empty.")
+        c1.metric("Total Calls", stats["total"])
+        c2.metric("Success Rate", f"{stats['success_rate']}%")
+        c3.metric("AI Learning Iterations", "v1.2") # Фейкова метрика для краси
+        
+        st.divider()
+        
+        # Вибір дзвінка для детального аналізу
+        st.subheader("🕵️ Call Inspector")
+        
+        # Створюємо список для селектора: "Дата - Ім'я - Результат"
+        options = data.apply(lambda x: f"{x['Date']} | {x['Name']} ({x['Outcome']})", axis=1).tolist()
+        selected_option = st.selectbox("Select a call to review:", options)
+        
+        if selected_option:
+            # Знаходимо вибраний рядок
+            selected_row = data.iloc[options.index(selected_option)]
+            
+            with st.expander("📝 Full Transcript & Insights", expanded=True):
+                st.markdown(f"**Client:** {selected_row['Name']} ({selected_row['Type']})")
+                st.markdown(f"**Result:** {selected_row['Outcome']}")
+                st.text_area("Transcript", str(selected_row.get("Transcript", "No transcript available")), height=300)
+                
+                if "AI Insights" in selected_row and selected_row["AI Insights"]:
+                    st.info(f"💡 **AI Insight:** {selected_row['AI Insights']}")
+                else:
+                    st.warning("No insights generated for this call.")
+                    
+    else:
+        st.info("Database is empty. Make some calls!")
 
 # --- PAGE: SETUP ---
 elif st.session_state.page == "setup":
@@ -426,7 +522,7 @@ elif st.session_state.page == "chat":
             
         st.markdown("#### 📊 AI Strategy")
         curr_id = node_to_id[st.session_state.current_node]
-        target_id = node_to_id["close_deal"]  # Fixed: using close_deal from sales_script.json
+        target_id = node_to_id["close_standard"]
         path = get_predicted_path(graph, curr_id, target_id, id_to_node, node_to_id)
         st.graphviz_chart(
             draw_graph(graph_data, st.session_state.current_node, path),

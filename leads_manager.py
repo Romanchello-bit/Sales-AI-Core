@@ -43,13 +43,14 @@ def save_lead_to_db(lead_info, chat_history, outcome):
         if not sheet.get_all_values():
             sheet.append_row([
                 "Date", "Name", "Company", "Type", "Context", 
-                "Pain Point", "Budget", "Outcome", "Summary"
+                "Pain Point", "Budget", "Outcome", "Transcript"
             ])
     except:
         pass # Таблиця може бути новою
 
     # Формуємо рядок даних
-    summary_text = f"Msgs: {len(chat_history)}"
+    # Збираємо весь текст діалогу для навчання
+    transcript = "\n".join([f"{msg['role']}: {msg['content']}" for msg in chat_history])
     
     row = [
         datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -60,7 +61,7 @@ def save_lead_to_db(lead_info, chat_history, outcome):
         "AI Pending", # Тут можна додати AI аналіз
         "Unknown",
         outcome,
-        summary_text
+        transcript
     ]
     
     # Додаємо рядок

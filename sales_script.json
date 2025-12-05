@@ -1,151 +1,179 @@
 {
     "nodes": {
-        "start": "ПРИВІТАННЯ. Мета: Представитися, переконатися, що говоримо з ЛПР (особою, що приймає рішення), і зачепити увагу інтригою (згадати про ріст продажів).",
-        "objection_busy": "Розумію, часу обмаль. Але це займе всього 30 секунд, а зекономить вам години. Тільки одне питання: як ви зараз шукаєте клієнтів?",
-        "qualification": "Скажіть, ви зараз використовуєте якусь CRM чи ведете все в Excel/блокноті?",
-        "tech_shame": "Ох, Excel — це класика, але ж уявіть, скільки лідів там губиться! А якби система сама нагадувала про кожного клієнта?",
-        "tech_praise": "Круто, що у вас є CRM! Але чи заповнюють її менеджери руками? Наш AI робить це автоматично.",
-        "pitch_value": "Суть проста: SellMe слухає розмову і сам створює угоду в CRM. Ви економите 2 години в день. Звучить цікаво?",
-        "objection_trust": "Звучить надто добре, щоб бути правдою? Розумію. Ми теж так думали, поки не побачили кейс компанії 'SoftGroup', яка скоротила штат вдвічі, зберігши прибуток.",
-        "objection_competitor": "А, ви про [Конкурента]? Вони молодці. Але у них ви платите за кожного юзера, а у нас — безліміт. Навіщо переплачувати?",
-        "price_reveal": "Вартість всього 50$ на місяць за всю команду. Це дешевше, ніж кава для офісу.",
-        "objection_expensive": "50$ — це дорого? Давайте порахуємо. Якщо AI врятує хоча б одну угоду на місяць, він вже окупився в 10 разів. Хіба ні?",
-        "objection_think": "Розумію, треба подумати. Але поки ви думаєте, ваші конкуренти вже впроваджують AI. Може, просто спробуємо безкоштовний тиждень?",
-        "soft_push": "Дивіться, ви нічим не ризикуєте. Я можу відкрити доступ прямо зараз без картки. Спробуємо?",
-        "close_deal": "Чудово! Ви мудрий керівник. Диктуйте пошту, куди скинути доступ.",
-        "exit_bad": "Добре. Якщо захочете автоматизувати хаос — ми тут. Гарного дня.",
-        "exit_later": "Окей, я наберу вас через місяць, коли вам набридне заповнювати звіти руками. До зв'язку!"
+        "start": "ЕТАП: ПРИВІТАННЯ. Задача: Коротко представитися (назви своє ім'я та компанію SellMe). Перевір, чи зручно говорити. Зроби 'гачок' про автоматизацію, але не продавай в лоб.",
+        "hook_rejection": "ЕТАП: УТРИМАННЯ УВАГИ. Клієнт хоче кинути трубку. Задача: Не сперечатися. Використати техніку 'Тільки 30 секунд'. Скажи, що якщо не сподобається — сам підеш. Будь впевненим.",
+        "qualification_needs": "ЕТАП: КВАЛІФІКАЦІЯ. Задача: Дізнатися, як вони зараз працюють. Запитай про CRM або Excel. Ціль — змусити клієнта визнати, що ручна робота — це незручно.",
+        "pain_followup": "ЕТАП: ТИСК НА БІЛЬ. Клієнт сказав, що менеджери забувають дзвонити. Задача: Підсилити цей біль. Запитай: 'А скільки грошей ви втрачаєте через це щомісяця?'.",
+        "pain_closing": "ЕТАП: ТИСК НА БІЛЬ. Проблема із закриттям угод. Задача: Поясни, що це людський фактор. Скажи, що AI не втомлюється і пам'ятає всі скрипти.",
+        "pitch_main": "ЕТАП: ПРЕЗЕНТАЦІЯ РІШЕННЯ. Задача: Презентуй SellMe як 'Суфлера для менеджерів'. Говори мовою вигоди (економія часу, ріст конверсії). Назви ціну (100$) в кінці.",
+        "price_shock": "ЕТАП: РОБОТА З 'ДОРОГО'. Задача: Не виправдовуйся. Порівняй ціну з вартістю втраченого клієнта. Використай прийом: 'Це дешевше, ніж кава для офісу'.",
+        "downsell_offer": "ЕТАП: ПОНИЖЕННЯ СТАВКИ. Задача: Клієнт не тягне повну версію. Запропонуй Light-версію за 20$. Скажи, що це ідеально для старту.",
+        "upsell_offer": "ЕТАП: ПІДВИЩЕННЯ ЧЕКУ. Клієнт зацікавлений. Задача: Запропонуй VIP-інтеграцію. Скажи, що це зробить систему повністю автономною.",
+        "objection_tech": "ЕТАП: ТЕХНІЧНІ СУМНІВИ. Задача: Заспокой клієнта. Скажи, що це плагін для браузера, ставиться за 1 хвилину. Ніяких айтішників не треба.",
+        "competitor_trap": "ЕТАП: ВІДСТРОЙКА ВІД КОНКУРЕНТІВ. Задача: Похвали конкурента, але покажи нашу унікальність (ми не просто пишемо дзвінки, ми підказуємо онлайн).",
+        "close_standard": "ЕТАП: ЗАКРИТТЯ (Standard). Задача: Переходь до діла. Запитай куди виставити рахунок або коли зручно підписати договір.",
+        "close_light": "ЕТАП: ЗАКРИТТЯ (Light). Задача: Закрий на дешевий тариф. Головне — почати співпрацю.",
+        "close_vip": "ЕТАП: ЗАКРИТТЯ (VIP). Задача: Закріпи успіх. Привітай з правильним рішенням.",
+        "referral_ask": "ЕТАП: РЕКОМЕНДАЦІЯ. Задача: Угода зірвалася. Ввічливо попроси контакт партнера, кому це може бути цікаво.",
+        "exit_success": "ЕТАП: ПРОЩАННЯ (Успіх). Задача: Подякуй, домовся про наступний крок (лист/дзвінок). Попрощайся на позитиві.",
+        "exit_fail": "ЕТАП: ПРОЩАННЯ (Відмова). Задача: Залиш двері відкритими. Скажи, що будеш радий допомогти в майбутньому.",
+        "exit_neutral": "ЕТАП: ПРОЩАННЯ (Нейтрально). Задача: Ввічливо заверши розмову."
     },
     "edges": [
         {
             "from": "start",
-            "to": "qualification",
+            "to": "hook_rejection",
+            "weight": 2
+        },
+        {
+            "from": "start",
+            "to": "qualification_needs",
             "weight": 1
         },
         {
             "from": "start",
-            "to": "objection_busy",
-            "weight": 5
+            "to": "exit_fail",
+            "weight": 1000
         },
         {
-            "from": "start",
-            "to": "exit_bad",
-            "weight": 100
-        },
-        {
-            "from": "objection_busy",
-            "to": "qualification",
-            "weight": 2
-        },
-        {
-            "from": "objection_busy",
-            "to": "exit_later",
-            "weight": 10
-        },
-        {
-            "from": "qualification",
-            "to": "tech_shame",
-            "weight": 2
-        },
-        {
-            "from": "qualification",
-            "to": "tech_praise",
-            "weight": 2
-        },
-        {
-            "from": "qualification",
-            "to": "objection_trust",
-            "weight": 5
-        },
-        {
-            "from": "tech_shame",
-            "to": "pitch_value",
+            "from": "hook_rejection",
+            "to": "qualification_needs",
             "weight": 1
         },
         {
-            "from": "tech_praise",
-            "to": "pitch_value",
-            "weight": 1
-        },
-        {
-            "from": "pitch_value",
-            "to": "price_reveal",
-            "weight": 2
-        },
-        {
-            "from": "pitch_value",
-            "to": "objection_competitor",
-            "weight": 4
-        },
-        {
-            "from": "pitch_value",
-            "to": "objection_trust",
-            "weight": 4
-        },
-        {
-            "from": "objection_trust",
-            "to": "pitch_value",
-            "weight": 2
-        },
-        {
-            "from": "objection_trust",
-            "to": "soft_push",
-            "weight": 3
-        },
-        {
-            "from": "objection_competitor",
-            "to": "price_reveal",
-            "weight": 2
-        },
-        {
-            "from": "objection_competitor",
-            "to": "exit_bad",
+            "from": "hook_rejection",
+            "to": "exit_fail",
             "weight": 50
         },
         {
-            "from": "price_reveal",
-            "to": "close_deal",
-            "weight": 10
-        },
-        {
-            "from": "price_reveal",
-            "to": "objection_expensive",
-            "weight": 3
-        },
-        {
-            "from": "price_reveal",
-            "to": "objection_think",
-            "weight": 4
-        },
-        {
-            "from": "objection_expensive",
-            "to": "soft_push",
+            "from": "qualification_needs",
+            "to": "pain_followup",
             "weight": 1
         },
         {
-            "from": "objection_expensive",
-            "to": "exit_bad",
-            "weight": 20
+            "from": "qualification_needs",
+            "to": "pain_closing",
+            "weight": 1
         },
         {
-            "from": "objection_think",
-            "to": "soft_push",
-            "weight": 2
-        },
-        {
-            "from": "objection_think",
-            "to": "exit_later",
+            "from": "qualification_needs",
+            "to": "pitch_main",
             "weight": 5
         },
         {
-            "from": "soft_push",
-            "to": "close_deal",
+            "from": "pain_followup",
+            "to": "pitch_main",
             "weight": 1
         },
         {
-            "from": "soft_push",
-            "to": "exit_later",
+            "from": "pain_closing",
+            "to": "pitch_main",
+            "weight": 1
+        },
+        {
+            "from": "pitch_main",
+            "to": "price_shock",
+            "weight": 5
+        },
+        {
+            "from": "pitch_main",
+            "to": "objection_tech",
+            "weight": 3
+        },
+        {
+            "from": "pitch_main",
+            "to": "competitor_trap",
+            "weight": 4
+        },
+        {
+            "from": "pitch_main",
+            "to": "upsell_offer",
             "weight": 10
+        },
+        {
+            "from": "pitch_main",
+            "to": "close_standard",
+            "weight": 2
+        },
+        {
+            "from": "price_shock",
+            "to": "downsell_offer",
+            "weight": 2
+        },
+        {
+            "from": "price_shock",
+            "to": "pitch_main",
+            "weight": 5
+        },
+        {
+            "from": "price_shock",
+            "to": "close_standard",
+            "weight": 10
+        },
+        {
+            "from": "downsell_offer",
+            "to": "close_light",
+            "weight": 1
+        },
+        {
+            "from": "downsell_offer",
+            "to": "exit_fail",
+            "weight": 10
+        },
+        {
+            "from": "objection_tech",
+            "to": "pitch_main",
+            "weight": 2
+        },
+        {
+            "from": "objection_tech",
+            "to": "upsell_offer",
+            "weight": 5
+        },
+        {
+            "from": "competitor_trap",
+            "to": "pitch_main",
+            "weight": 2
+        },
+        {
+            "from": "competitor_trap",
+            "to": "downsell_offer",
+            "weight": 4
+        },
+        {
+            "from": "upsell_offer",
+            "to": "close_vip",
+            "weight": 2
+        },
+        {
+            "from": "upsell_offer",
+            "to": "close_standard",
+            "weight": 1
+        },
+        {
+            "from": "close_standard",
+            "to": "exit_success",
+            "weight": 0
+        },
+        {
+            "from": "close_light",
+            "to": "exit_success",
+            "weight": 0
+        },
+        {
+            "from": "close_vip",
+            "to": "exit_success",
+            "weight": 0
+        },
+        {
+            "from": "exit_fail",
+            "to": "referral_ask",
+            "weight": 1
+        },
+        {
+            "from": "referral_ask",
+            "to": "exit_neutral",
+            "weight": 0
         }
     ]
 }
