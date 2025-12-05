@@ -156,99 +156,73 @@ def analyze_full_context(model, user_input, current_node, chat_history):
     except:
         return {"archetype": "UNKNOWN", "intent": "STAY", "reasoning": "Error"}
 
-def generate_response(model, context_text, user_input, intent, lead_info, archetype):
-    # Визначаємо, наскільки детальним має бути спіч
-    call_context = lead_info.get('context', 'Cold')
-    
-    verbosity_instruction = ""
-    if "Cold" in call_context or "Холодний" in call_context:
-        verbosity_instruction = "LENGTH: VERY SHORT. Elevator Pitch style. The client has no patience."
-    else:
-        verbosity_instruction = "LENGTH: Detailed and explanatory. The client is interested."
-
-    # Інструкція по стилю (з попередніх кроків)
-    style_instruction = ""
-    if archetype == "DRIVER": style_instruction = "STYLE: Direct, ROI-focused."
-    elif archetype == "ANALYST": style_instruction = "STYLE: Data-driven, precise."
-    elif archetype == "EXPRESSIVE": style_instruction = "STYLE: Visionary, exciting."
-    elif archetype == "CONSERVATIVE": style_instruction = "STYLE: Safe, supportive."
-
-    if intent == "STAY":
-        prompt = f"""
-        ROLE: Adaptive Sales Rep.
-        CONTEXT: {verbosity_instruction}
-        ARCHETYPE: {style_instruction}
-        
-        SITUATION: Step "{context_text}". Client Objected: "{user_input}".
-        TASK: Handle objection.
-        """
-    else:
-        prompt = f"""
-        ROLE: Adaptive Sales Rep.
-        CONTEXT: {verbosity_instruction}
-        ARCHETYPE: {style_instruction}
-        
-        GOAL: Transition to "{context_text}". User said: "{user_input}".
-        TASK: Bridge to the next step naturally.
-        """
-        
-    try:
-        return model.generate_content(prompt).text.strip()
-    except: return "..."
-
-def generate_greeting(model, start_node_text, lead_info):
+def generate_response(model, instruction_text, user_input, intent, lead_info, archetype):
     """
-    Генерує привітання залежно від КОНТЕКСТУ (Холодний vs Теплий).
+    Генерує ЖИВУ відповідь на основі інструкції.
     """
+    # 1. Формуємо портрет клієнта
     bot_name = lead_info.get('bot_name', 'Олексій')
     client_name = lead_info.get('name', 'Клієнт')
     company = lead_info.get('company', 'Компанія')
-    context = lead_info.get('context', 'Cold Call')
+    context = lead_info.get('context', 'Cold')
     
-    # Спеціальні інструкції для різних типів дзвінків
-    if "Cold" in context or "Холодний" in context:
-        # ХОЛОДНИЙ ДЗВІНОК: Жодних "я представляю компанію". Коротко, зухвало.
-        strategy = f"""
-        STRATEGY: COLD CALL (High Risk of Hangup).
-        RULES:
-        1. NO generic intros ("Hello, my name is... I represent...").
-        2. Use a "Pattern Interrupt" or "Permission-based opener".
-        3. Be brief (under 10 seconds).
-        
-        Example format: "{client_name}? Це {bot_name}. Ми не знайомі, але я дзвоню щодо [Topic]. Маєте 30 секунд?"
-        """
-    elif "Warm" in context or "Теплий" in context:
-        # ТЕПЛИЙ ЛІД: Клієнт чекає дзвінка.
-        strategy = """
-        STRATEGY: WARM LEAD (Inbound Request).
-        RULES:
-        1. Acknowledge their request immediately.
-        2. Verify it's a good time to talk.
-        3. Tone: Helpful, responsive.
-        
-        Example format: "Вітаю, {client_name}! Це {bot_name} з SellMe. Ви залишали заявку на сайті, зручно зараз?"
-        """
-    else:
-        # FOLLOW-UP: Ми вже говорили.
-        strategy = """
-        STRATEGY: FOLLOW-UP.
-        RULES:
-        1. Remind who you are immediately.
-        2. Reference previous context.
-        """
-
+    # 2. Налаштування стилю (Tone of Voice)
+    tone = "Professional, confident."
+    if archetype == "DRIVER": tone = "Direct, concise, results-oriented (Time is money)."
+    elif archetype == "ANALYST": tone = "Logical, factual, detailed."
+    elif archetype == "EXPRESSIVE": tone = "Energetic, inspiring, emotional."
+    elif archetype == "CONSERVATIVE": tone = "Calm, supportive, reassuring."
+    
+    # 3. Налаштування довжини (Brevity)
+    length_instruction = "Keep it concise."
+    if "Cold" in context: length_instruction = "Extremely short and punchy (Elevator Pitch)."
+    
+    # 4. Формуємо Промпт
     prompt = f"""
-    ROLE: Professional Sales Rep ({bot_name}).
+    ROLE: You are {bot_name}, a top-tier sales representative at SellMe AI.
     CLIENT: {client_name} from {company}.
-    CONTEXT: {strategy}
+    CURRENT GOAL (INSTRUCTION): "{instruction_text}"
+    USER SAID: "{user_input}"
+    INTENT DETECTED: {intent}
+    ARCHETYPE: {archetype}
     
-    TASK: Generate the opening phrase based on the instruction: "{start_node_text}".
-    LANGUAGE: Ukrainian.
+    TASK: Generate the spoken response in Ukrainian.
+    
+    CRITICAL RULES:
+    1. DO NOT output the instruction itself. ACT IT OUT.
+    2. Adapt to the client's tone ({tone}).
+    3. {length_instruction}
+    4. If INTENT is 'STAY' (Objection): Acknowledge the objection, reframe it, and steer back to the goal.
+    5. If INTENT is 'MOVE': Validate the user's answer and transition smoothly to the goal.
+    
+    OUTPUT: Just the spoken words. No "Option 1", no quotes.
+    """
+    
+    try:
+        return model.generate_content(prompt).text.strip()
+    except Exception as e:
+        return f"[System Error: {e}]"
+
+def generate_greeting(model, start_instruction, lead_info):
+    bot_name = lead_info.get('bot_name', 'Manager')
+    client_name = lead_info.get('name', 'Client')
+    context = lead_info.get('context', 'Cold')
+    
+    prompt = f"""
+    ROLE: Sales Rep {bot_name}.
+    CLIENT: {client_name}.
+    CONTEXT: {context} call.
+    INSTRUCTION: "{start_instruction}"
+    
+    TASK: Generate the opening line.
+    - If Cold Call: Be brief, aggressive (pattern interrupt).
+    - If Warm Call: Be welcoming, reference the application.
+    - Language: Ukrainian.
     """
     try:
         return model.generate_content(prompt).text.strip()
     except:
-        return f"{client_name}? Це {bot_name}."
+        return f"Алло, {client_name}? Це {bot_name}."
 
 
 # --- UI COMPONENTS ---
