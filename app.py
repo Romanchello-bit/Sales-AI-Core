@@ -200,56 +200,57 @@ def draw_graph(graph_data, current_node, predicted_path):
     
     dot = graphviz.Digraph()
     
-    # --- ГОЛОВНА ЗМІНА ТУТ ---
-    # rankdir='TB' -> Top to Bottom (Вертикально)
-    # splines='ortho' -> ламані лінії (прямі кути), виглядає охайніше
-    # nodesep='0.6' -> горизонтальний відступ між сусідніми вузлами
-    # ranksep='0.8' -> вертикальний відступ між рівнями
-    dot.attr(rankdir='TB', splines='ortho', nodesep='0.6', ranksep='0.8')
+    # --- НАЛАШТУВАННЯ ГЕОМЕТРІЇ (Compact Mode) ---
+    dot.attr(
+        rankdir='TB',        # Зверху вниз
+        splines='ortho',     # Ламані лінії (прямі кути)
+        nodesep='0.3',       # Мінімальний відступ збоку
+        ranksep='0.4',       # Мінімальний відступ знизу (робить граф коротшим)
+        bgcolor='transparent' # Прозорий фон, щоб зливався з темою
+    )
     
-    # Налаштування загального стилю вузлів для кращої читабельності
-    dot.attr('node', shape='box', style='rounded,filled', fontname='Arial', fontsize='11', height='0.6')
+    # --- СТИЛЬ БЛОКІВ (Wide & Slim) ---
+    # shape='note' виглядає як документ, або 'box' для суворості
+    # fixedsize='false' дозволяє блоку розтягуватись під текст, але ми задаємо мінімальну ширину
+    dot.attr('node', 
+             shape='box', 
+             style='rounded,filled', 
+             fontname='Arial', 
+             fontsize='11', 
+             width='2.5',      # Робимо їх широкими
+             height='0.5',     # Робимо їх низькими
+             margin='0.1'      # Менше полів всередині блоку
+    )
     
-    # Малюємо вузли
+    # --- СТИЛЬ ЛІНІЙ ---
+    dot.attr('edge', fontname='Arial', fontsize='9', arrowsize='0.6')
+
     for n in nodes:
-        # Базовий стиль (сірий)
-        fill = '#F0F2F6'
-        color = '#BDC3C7'
-        pen = '1'
-        fontcolor = 'black'
+        # Базовий стиль (Світло-сірий, непомітний)
+        fill = '#F7F9F9'; color = '#BDC3C7'; pen = '1'; font = '#424949'
         
-        # Якщо це поточний вузол (Яскраво червоний)
-        if n == current_node:
-            fill = '#FF4B4B'
-            color = 'black'
-            pen = '3' # Товстіша рамка
-            fontcolor = 'white' # Білий текст на червоному фоні
+        # Поточний крок (Червоний акцент)
+        if n == current_node: 
+            fill = '#FF4B4B'; color = '#922B21'; pen = '2'; font = 'white'
             
-        # Якщо це частина "Золотого шляху" (Жовтий)
-        elif n in predicted_path:
-            fill = '#FFF8E1'
-            color = '#F1C40F'
-            pen = '2'
+        # Золотий шлях (Жовтий підсвіт)
+        elif n in predicted_path: 
+            fill = '#FEF9E7'; color = '#F1C40F'; pen = '1'; font = 'black'
             
-        dot.node(n, label=n, fillcolor=fill, color=color, penwidth=pen, fontcolor=fontcolor)
+        # Малюємо вузол
+        dot.node(n, label=n, fillcolor=fill, color=color, penwidth=pen, fontcolor=font)
         
-    # Малюємо ребра (стрілочки)
     for e in edges:
-        color = '#BDC3C7' # Базовий сірий для стрілок
-        pen = '1'
+        color = '#D5D8DC'; pen = '1' # Дуже світлі лінії за замовчуванням
         
-        # Якщо стрілка веде по золотому шляху - підсвічуємо її
+        # Підсвітка шляху
         if e["from"] in predicted_path and e["to"] in predicted_path:
-            # Додаткова перевірка: підсвічуємо тільки якщо вони йдуть підряд у шляху
-            try:
-                idx1 = predicted_path.index(e["from"])
-                idx2 = predicted_path.index(e["to"])
-                if idx2 == idx1 + 1:
-                    color = '#F1C40F' # Золотий
-                    pen = '2'
-            except ValueError:
-                pass # Якщо раптом вузол не в списку, ігноруємо
-                
+             try:
+                 # Перевіряємо послідовність
+                 if predicted_path.index(e["to"]) == predicted_path.index(e["from"]) + 1:
+                    color = '#F1C40F'; pen = '2.5' # Жирна золота лінія
+             except: pass
+             
         dot.edge(e["from"], e["to"], color=color, penwidth=pen)
         
     return dot
@@ -356,7 +357,10 @@ elif st.session_state.page == "chat":
         curr_id = node_to_id[st.session_state.current_node]
         target_id = node_to_id["close_deal"]  # Fixed: using close_deal from sales_script.json
         path = get_predicted_path(graph, curr_id, target_id, id_to_node, node_to_id)
-        st.graphviz_chart(draw_graph(graph_data, st.session_state.current_node, path))
+        st.graphviz_chart(
+            draw_graph(graph_data, st.session_state.current_node, path),
+            use_container_width=True  # Розтягує граф на всю ширину колонки
+        )
 
     with col_chat:
         for msg in st.session_state.messages:
