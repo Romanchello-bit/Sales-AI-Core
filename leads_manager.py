@@ -1,51 +1,96 @@
+import streamlit as st
 import pandas as pd
-import os
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
-LEADS_FILE = "leads.csv"
+# Назва твоєї таблиці в Google Sheets (має співпадати буква в букву!)
+SHEET_NAME = "SellMe_Leads"
 
-def init_db():
-    """Створює файл, якщо його немає"""
-    if not os.path.exists(LEADS_FILE):
-        df = pd.DataFrame(columns=[
-            "Date", "Client Name", "Company", "Type", "Context", 
-            "Outcome", "Final Step", "Summary"
-        ])
-        df.to_csv(LEADS_FILE, index=False)
+def connect_to_gsheet():
+    """Підключення до Google Sheets через Secrets"""
+    try:
+        # Створюємо об'єкт облікових даних із секретів Streamlit
+        # Streamlit автоматично конвертує TOML секцію [gcp_service_account] у словник
+        if "gcp_service_account" not in st.secrets:
+            return None
 
-def save_lead(lead_data, outcome, final_step, chat_history):
-    """Зберігає результат розмови"""
-    init_db()
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        
+        # Виправляємо переноси рядків у приватному ключі (часта проблема при копіюванні)
+        creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        client = gspread.authorize(creds)
+        
+        # Відкриваємо таблицю
+        sheet = client.open(SHEET_NAME).sheet1
+        return sheet
+    except Exception as e:
+        # st.error(f"❌ Помилка підключення до Google Sheets: {e}") 
+        # При кожному рерані може бути помилка якщо немає секретів, краще тихо
+        return None
+
+def save_lead_to_db(lead_info, chat_history, outcome):
+    """Зберігає ліда в Google Таблицю"""
+    sheet = connect_to_gsheet()
+    if not sheet:
+        return # Якщо немає зв'язку, виходимо
     
-    # Робимо просте самарі (останні 2 повідомлення або статус)
-    summary = f"Ended at {final_step}. Total msgs: {len(chat_history)}"
+    # Якщо таблиця порожня, додамо заголовки
+    try:
+        if not sheet.get_all_values():
+            sheet.append_row([
+                "Date", "Name", "Company", "Type", "Context", 
+                "Pain Point", "Budget", "Outcome", "Summary"
+            ])
+    except:
+        pass # Таблиця може бути новою
+
+    # Формуємо рядок даних
+    summary_text = f"Msgs: {len(chat_history)}"
     
-    new_row = {
-        "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "Client Name": lead_data.get("name", "Unknown"),
-        "Company": lead_data.get("company", "-"),
-        "Type": lead_data.get("type", "B2B"),
-        "Context": lead_data.get("context", "Cold Call"),
-        "Outcome": outcome,
-        "Final Step": final_step,
-        "Summary": summary
-    }
+    row = [
+        datetime.now().strftime("%Y-%m-%d %H:%M"),
+        lead_info.get("name", "-"),
+        lead_info.get("company", "-"),
+        lead_info.get("type", "-"),
+        lead_info.get("context", "-"),
+        "AI Pending", # Тут можна додати AI аналіз
+        "Unknown",
+        outcome,
+        summary_text
+    ]
     
-    df = pd.read_csv(LEADS_FILE)
-    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    df.to_csv(LEADS_FILE, index=False)
-    return True
+    # Додаємо рядок
+    sheet.append_row(row)
+    print("✅ Дані збережено в Google Sheets!")
 
 def get_analytics():
-    """Повертає статистику для дашборду"""
-    init_db()
-    df = pd.read_csv(LEADS_FILE)
-    if df.empty:
-        return None
+    """Читає дані з Google Таблиці для дашборду"""
+    sheet = connect_to_gsheet()
+    if not sheet:
+        return None, None
         
-    stats = {
-        "total": len(df),
-        "success_rate": round(len(df[df["Outcome"] == "Success"]) / len(df) * 100, 1),
-        "top_fail_reasons": df[df["Outcome"] == "Fail"]["Final Step"].value_counts().head(3)
-    }
-    return df, stats
+    # Отримуємо всі записи
+    try:
+        data = sheet.get_all_records()
+        df = pd.DataFrame(data)
+        
+        if df.empty:
+            return None, None
+            
+        stats = {
+            "total": len(df),
+            "success_rate": 0,
+            "top_fail_reasons": None
+        }
+        
+        if "Outcome" in df.columns and not df.empty:
+            success_count = len(df[df["Outcome"] == "Success"])
+            stats["success_rate"] = round(success_count / len(df) * 100, 1)
+            
+        return df, stats
+    except:
+        return None, None
