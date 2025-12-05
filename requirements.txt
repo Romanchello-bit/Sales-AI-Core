@@ -2,3 +2,5 @@ streamlit
 google-generativeai
 pandas
 graphviz
+gspread
+oauth2client
