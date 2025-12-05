@@ -156,38 +156,40 @@ def analyze_full_context(model, user_input, current_node, chat_history):
     except:
         return {"archetype": "UNKNOWN", "intent": "STAY", "reasoning": "Error"}
 
-def generate_response(model, context, user_input, intent, lead_info, archetype):
-    # Визначаємо стиль спілкування залежно від патерну
-    style_instruction = ""
+def generate_response(model, context_text, user_input, intent, lead_info, archetype):
+    # Визначаємо, наскільки детальним має бути спіч
+    call_context = lead_info.get('context', 'Cold')
     
-    if archetype == "DRIVER":
-        style_instruction = "STYLE: Ultra-short, confident. Focus on ROI and speed. No fluff. Be direct."
-    elif archetype == "ANALYST":
-        style_instruction = "STYLE: Logical, detailed. Use facts, numbers, and technical terms. Prove your point."
-    elif archetype == "EXPRESSIVE":
-        style_instruction = "STYLE: Energetic, inspiring. Use metaphors, exclamation marks. Focus on the 'Future Success'."
-    elif archetype == "CONSERVATIVE":
-        style_instruction = "STYLE: Calm, supportive, safe. Emphasize low risk, support, and ease of use. Don't push."
+    verbosity_instruction = ""
+    if "Cold" in call_context or "Холодний" in call_context:
+        verbosity_instruction = "LENGTH: VERY SHORT. Elevator Pitch style. The client has no patience."
     else:
-        style_instruction = "STYLE: Professional and polite."
+        verbosity_instruction = "LENGTH: Detailed and explanatory. The client is interested."
+
+    # Інструкція по стилю (з попередніх кроків)
+    style_instruction = ""
+    if archetype == "DRIVER": style_instruction = "STYLE: Direct, ROI-focused."
+    elif archetype == "ANALYST": style_instruction = "STYLE: Data-driven, precise."
+    elif archetype == "EXPRESSIVE": style_instruction = "STYLE: Visionary, exciting."
+    elif archetype == "CONSERVATIVE": style_instruction = "STYLE: Safe, supportive."
 
     if intent == "STAY":
         prompt = f"""
-        ROLE: Chameleon Sales Rep.
-        ARCHETYPE DETECTED: {archetype} -> {style_instruction}
+        ROLE: Adaptive Sales Rep.
+        CONTEXT: {verbosity_instruction}
+        ARCHETYPE: {style_instruction}
         
-        SITUATION: Step "{context}". Client Objected: "{user_input}".
-        TASK: Handle objection strictly matching the detected STYLE.
-        CONSTRAINT: Speak naturally in Ukrainian. Output ONLY the response.
+        SITUATION: Step "{context_text}". Client Objected: "{user_input}".
+        TASK: Handle objection.
         """
     else:
         prompt = f"""
-        ROLE: Chameleon Sales Rep.
-        ARCHETYPE DETECTED: {archetype} -> {style_instruction}
+        ROLE: Adaptive Sales Rep.
+        CONTEXT: {verbosity_instruction}
+        ARCHETYPE: {style_instruction}
         
-        GOAL: Transition to "{context}". User said: "{user_input}".
-        TASK: Bridge to the next step using the detected STYLE.
-        CONSTRAINT: Speak naturally in Ukrainian. Output ONLY the response.
+        GOAL: Transition to "{context_text}". User said: "{user_input}".
+        TASK: Bridge to the next step naturally.
         """
         
     try:
@@ -195,32 +197,58 @@ def generate_response(model, context, user_input, intent, lead_info, archetype):
     except: return "..."
 
 def generate_greeting(model, start_node_text, lead_info):
-    """Генерує ПЕРШЕ повідомлення"""
-    
-    # Використовуємо .get(), щоб уникнути помилок, якщо ключа немає
+    """
+    Генерує привітання залежно від КОНТЕКСТУ (Холодний vs Теплий).
+    """
     bot_name = lead_info.get('bot_name', 'Олексій')
-    client_name = lead_info.get('name', 'Клієнт')  # <--- ТУТ ТЕЖ МАЄ БУТИ 'name'
+    client_name = lead_info.get('name', 'Клієнт')
     company = lead_info.get('company', 'Компанія')
+    context = lead_info.get('context', 'Cold Call')
     
+    # Спеціальні інструкції для різних типів дзвінків
+    if "Cold" in context or "Холодний" in context:
+        # ХОЛОДНИЙ ДЗВІНОК: Жодних "я представляю компанію". Коротко, зухвало.
+        strategy = f"""
+        STRATEGY: COLD CALL (High Risk of Hangup).
+        RULES:
+        1. NO generic intros ("Hello, my name is... I represent...").
+        2. Use a "Pattern Interrupt" or "Permission-based opener".
+        3. Be brief (under 10 seconds).
+        
+        Example format: "{client_name}? Це {bot_name}. Ми не знайомі, але я дзвоню щодо [Topic]. Маєте 30 секунд?"
+        """
+    elif "Warm" in context or "Теплий" in context:
+        # ТЕПЛИЙ ЛІД: Клієнт чекає дзвінка.
+        strategy = """
+        STRATEGY: WARM LEAD (Inbound Request).
+        RULES:
+        1. Acknowledge their request immediately.
+        2. Verify it's a good time to talk.
+        3. Tone: Helpful, responsive.
+        
+        Example format: "Вітаю, {client_name}! Це {bot_name} з SellMe. Ви залишали заявку на сайті, зручно зараз?"
+        """
+    else:
+        # FOLLOW-UP: Ми вже говорили.
+        strategy = """
+        STRATEGY: FOLLOW-UP.
+        RULES:
+        1. Remind who you are immediately.
+        2. Reference previous context.
+        """
+
     prompt = f"""
-    ROLE: Professional Sales Rep named {bot_name}.
+    ROLE: Professional Sales Rep ({bot_name}).
     CLIENT: {client_name} from {company}.
-    TYPE: {lead_info.get('type')} ({lead_info.get('context')}).
+    CONTEXT: {strategy}
     
-    GOAL: Start conversation based on instruction: "{start_node_text}".
-    
-    INSTRUCTIONS:
-    - Always state your name ({bot_name}) and company (SellMe AI).
-    - If B2B: Be formal.
-    - If B2C: Be friendly.
-    - Language: Ukrainian.
-    
-    OUTPUT: Just the spoken greeting.
+    TASK: Generate the opening phrase based on the instruction: "{start_node_text}".
+    LANGUAGE: Ukrainian.
     """
     try:
         return model.generate_content(prompt).text.strip()
     except:
-        return f"Доброго дня, це {bot_name} з SellMe. Маєте хвилинку?"
+        return f"{client_name}? Це {bot_name}."
 
 
 # --- UI COMPONENTS ---
@@ -342,6 +370,30 @@ elif st.session_state.page == "setup":
         
         type_ = c1.selectbox("Тип бізнесу", ["B2B", "B2C"])
         context = c2.selectbox("Контекст", ["Холодний дзвінок", "Теплий лід (заявка)", "Повторний дзвінок"])
+        
+        # --- ПЕРЕВІРКА ІСТОРІЇ ---
+        # Спробуємо знайти клієнта в базі (якщо підключено Google Sheets)
+        if st.checkbox("🔍 Перевірити в базі (за ім'ям)"):
+            try:
+                # Це працює, якщо у нас є leads_manager з Google Sheets
+                from leads_manager import connect_to_gsheet
+                sheet = connect_to_gsheet()
+                if sheet:
+                    records = sheet.get_all_records()
+                    found = [r for r in records if str(r['Name']).lower() == name.lower()]
+                    
+                    if found:
+                        last_interaction = found[-1] # Останній запис
+                        st.info(f"📜 Знайдено історію! Останній контакт: {last_interaction['Date']}")
+                        st.warning(f"Результат минулого разу: {last_interaction['Outcome']}")
+                        st.caption(f"Нотатки: {last_interaction.get('Summary', '')}")
+                        
+                        # Можна автоматично змінити контекст на "Повторний"
+                        context = "Повторний дзвінок" 
+                    else:
+                        st.success("✨ Новий клієнт")
+            except Exception as e:
+                st.error("База даних недоступна.")
         
         submitted = st.form_submit_button("🚀 Почати розмову")
         
