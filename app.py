@@ -9,19 +9,22 @@ import google.generativeai as genai
 from graph_module import Graph
 from algorithms import bellman_ford_list
 from leads_manager import get_analytics
+from database import add_lead, init_db
 import experiments
+import matplotlib.pyplot as plt
+import requests
+from bs4 import BeautifulSoup
 
 # --- CONFIG ---
 st.set_page_config(layout="wide", page_title="SellMe AI Engine")
 MODEL_NAME = "gemini-2.5-flash"
-LEADS_FILE = "leads_database.csv"
 
 # --- SESSION STATE INIT ---
 if "page" not in st.session_state: st.session_state.page = "dashboard"
 if "messages" not in st.session_state: st.session_state.messages = []
 if "current_node" not in st.session_state: st.session_state.current_node = "start"
 if "lead_info" not in st.session_state: st.session_state.lead_info = {}
-if "product_info" not in st.session_state: st.session_state.product_info = {} # NEW: Product Context
+if "product_info" not in st.session_state: st.session_state.product_info = {}
 if "visited_history" not in st.session_state: st.session_state.visited_history = []
 if "current_archetype" not in st.session_state: st.session_state.current_archetype = "UNKNOWN"
 if "reasoning" not in st.session_state: st.session_state.reasoning = ""
@@ -35,58 +38,15 @@ if "checklist" not in st.session_state:
         "Experiment/Revise": False
     }
 
-# --- DATA MANAGER ---
-def init_db():
-    if not os.path.exists(LEADS_FILE):
-        df = pd.DataFrame(columns=[
-            "Date", "Name", "Company", "Type", "Context", 
-            "Pain Point", "Budget", "Outcome", "Summary"
-        ])
-        df.to_csv(LEADS_FILE, index=False)
-
-def save_lead_to_db(lead_info, chat_history, outcome):
-    init_db()
-    model = genai.GenerativeModel(MODEL_NAME)
-    chat_text = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history])
-    
-    prompt = f"""
-    Analyze this sales conversation:
-    {chat_text}
-    
-    Extract these fields in JSON format:
-    - pain_point: What is the client's main problem?
-    - budget: Did they mention money/price sensitivity?
-    - summary: 1 sentence summary of the call.
-    """
-    try:
-        response = model.generate_content(prompt)
-        ai_data = response.text
-    except:
-        ai_data = "AI Extraction Failed"
-
-    new_row = {
-        "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "Name": lead_info.get("name"),
-        "Company": lead_info.get("company"),
-        "Type": lead_info.get("type"),
-        "Context": lead_info.get("context"),
-        "Pain Point": "AI Analysis Pending",
-        "Budget": "Unknown",
-        "Outcome": outcome,
-        "Summary": f"Call with {len(chat_history)} messages. {outcome}"
-    }
-    
-    df = pd.read_csv(LEADS_FILE)
-    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    df.to_csv(LEADS_FILE, index=False)
-
 # --- AI & GRAPH LOGIC ---
+@st.cache_resource
 def configure_genai(api_key):
     try:
         genai.configure(api_key=api_key)
         return True
     except: return False
 
+@st.cache_data
 def load_graph_data():
     script_file = "sales_script_learned.json" if os.path.exists("sales_script_learned.json") else "sales_script.json"
     with open(script_file, "r", encoding="utf-8") as f: data = json.load(f)
@@ -152,9 +112,6 @@ def analyze_full_context(model, user_input, current_node, chat_history):
         return {"archetype": "UNKNOWN", "intent": "STAY", "reasoning": "Fallback safety"}
 
 def generate_response(model, instruction_text, user_input, intent, lead_info, archetype, product_info={}):
-    """
-    Generates a generic or product-specific response.
-    """
     bot_name = lead_info.get('bot_name', 'Олексій')
     client_name = lead_info.get('name', 'Клієнт')
     company = lead_info.get('company', 'Компанія')
@@ -169,7 +126,6 @@ def generate_response(model, instruction_text, user_input, intent, lead_info, ar
     length_instruction = "Keep it concise."
     if "Cold" in context: length_instruction = "Extremely short and punchy (Elevator Pitch)."
     
-    # NEW: Product Context Injection
     product_context = ""
     if product_info:
         product_context = f"""
@@ -215,7 +171,6 @@ def generate_greeting(model, start_instruction, lead_info, product_info={}):
     client_name = lead_info.get('name', 'Client')
     context = lead_info.get('context', 'Cold')
     
-    # NEW: Product Context Injection
     product_context = ""
     if product_info:
         product_context = f"""
@@ -311,7 +266,63 @@ def draw_graph(graph_data, current_node, predicted_path):
         dot.edge(e["from"], e["to"], color=color, penwidth=pen)
     return dot
 
+def create_archetype_visuals(df):
+    if df is None or df.empty or "Archetype" not in df.columns:
+        return None, None
+    df_filtered = df[df['Archetype'] != 'UNKNOWN']
+    if df_filtered.empty:
+        return None, None
+    archetype_counts = df_filtered['Archetype'].value_counts()
+    pie_fig, pie_ax = plt.subplots(figsize=(5, 5))
+    pie_ax.pie(archetype_counts, labels=archetype_counts.index, autopct='%1.1f%%', startangle=90)
+    pie_ax.set_title('Client Archetype Distribution')
+    pie_ax.axis('equal')
+    success_rates = {}
+    for archetype in archetype_counts.index:
+        total = len(df_filtered[df_filtered['Archetype'] == archetype])
+        success = len(df_filtered[(df_filtered['Archetype'] == archetype) & (df_filtered['Outcome'] == 'Success')])
+        success_rates[archetype] = (success / total) * 100 if total > 0 else 0
+    bar_fig, bar_ax = plt.subplots(figsize=(6, 4))
+    bar_ax.bar(success_rates.keys(), success_rates.values(), color=['#4CAF50', '#2196F3', '#FFC107', '#F44336'])
+    bar_ax.set_ylabel('Success Rate (%)')
+    bar_ax.set_title('Success Rate by Archetype')
+    bar_ax.set_ylim(0, 100)
+    return pie_fig, bar_fig
+
+def scrape_and_summarize(url, model):
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        st.error(f"Error fetching URL: {e}")
+        return None
+    soup = BeautifulSoup(response.content, 'html.parser')
+    text = soup.get_text(separator='\n', strip=True)
+    if len(text) < 100:
+        st.warning("Could not find enough text on the page.")
+        return None
+    prompt = f"""
+    Analyze the following text from a website and extract the product information in JSON format.
+    TEXT:
+    {text[:4000]} 
+    EXTRACT THESE FIELDS:
+    - "product_name": What is the name of the product or service?
+    - "product_value": What is the main value proposition in one sentence?
+    - "product_price": What is the pricing information? (e.g., "$100/month", "Free Trial", "Contact for pricing")
+    - "competitor_diff": What makes this product different from competitors?
+    Return only the JSON object.
+    """
+    try:
+        ai_response = model.generate_content(prompt)
+        clean_json_str = ai_response.text.replace("```json", "").replace("```", "").strip()
+        product_info = json.loads(clean_json_str)
+        return product_info
+    except (json.JSONDecodeError, Exception) as e:
+        st.error(f"Error processing AI response: {e}")
+        return None
+
 # --- MAIN APP ---
+init_db() # Initialize the database when the app starts
 st.sidebar.title("🛠️ SellMe Control")
 mode = st.sidebar.radio("Mode", ["🤖 Sales Bot CRM", "🧪 Math Lab"])
 
@@ -350,7 +361,19 @@ if mode == "🤖 Sales Bot CRM":
             c2.metric("Success Rate", f"{stats['success_rate']}%")
             c3.metric("AI Learning Iterations", "v1.2")
             st.divider()
+
+            st.subheader("📊 Archetype Analytics")
+            pie_chart, bar_chart = create_archetype_visuals(data)
+            if pie_chart and bar_chart:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.pyplot(pie_chart)
+                with col2:
+                    st.pyplot(bar_chart)
+            else:
+                st.info("Not enough data to display archetype analytics. Make some calls!")
             
+            st.divider()
             st.subheader("🕵️ Call Inspector")
             options = data.apply(lambda x: f"{x['Date']} | {x['Name']} ({x['Outcome']})", axis=1).tolist()
             selected_option = st.selectbox("Select a call to review:", options)
@@ -370,42 +393,43 @@ if mode == "🤖 Sales Bot CRM":
         st.title("👤 Налаштування Дзвінка")
         with st.form("lead_form"):
             c1, c2 = st.columns(2)
-            # Lead Info
-            c1.markdown("### 👨‍💼 Lead Info")
-            bot_name = c1.text_input("Ваше ім'я (Менеджера)", "Олексій")
-            name = c1.text_input("Ім'я Клієнта", "Олександр")
-            company = c1.text_input("Компанія", "SoftServe")
-            type_ = c1.selectbox("Тип бізнесу", ["B2B", "B2C"])
-            context = c1.selectbox("Контекст", ["Холодний дзвінок", "Теплий лід", "Повторний дзвінок"])
+            with c1:
+                st.markdown("### 👨‍💼 Lead Info")
+                bot_name = st.text_input("Ваше ім'я (Менеджера)", "Олексій")
+                name = st.text_input("Ім'я Клієнта", "Олександр")
+                company = st.text_input("Компанія", "SoftServe")
+                type_ = st.selectbox("Тип бізнесу", ["B2B", "B2C"])
+                context = st.selectbox("Контекст", ["Холодний дзвінок", "Теплий лід", "Повторний дзвінок"])
+                if st.checkbox("🔍 Перевірити в базі"):
+                    pass
 
-            # NEW: Product Info
-            c2.markdown("### 📦 Product / Service Info")
-            p_name = c2.text_input("Product Name", "AI Sales Engine")
-            p_value = c2.text_input("Main Benefit (Value)", "Increases sales by 300%")
-            p_price = c2.text_input("Price / Pricing Model", "$100/month")
-            p_diff = c2.text_input("Competitive Edge (Why us?)", "Learns from every call")
-            
-            if c1.checkbox("🔍 Перевірити в базі"):
-                try:
-                    from leads_manager import connect_to_gsheet
-                    sheet = connect_to_gsheet()
-                    if sheet:
-                        records = sheet.get_all_records()
-                        found = [r for r in records if str(r['Name']).lower() == name.lower()]
-                        if found:
-                            last = found[-1]
-                            st.info(f"📜 Contact Found: {last['Date']}")
-                            context = "Повторний дзвінок" 
-                        else: st.success("✨ New Client")
-                except: st.error("Database unavailable.")
-            
+            with c2:
+                st.markdown("### 📦 Product / Service Info")
+                url = st.text_input("Product URL", placeholder="https://example.com/product")
+                
+                if st.button("🤖 Fetch Product Info from URL"):
+                    if url:
+                        with st.spinner("Fetching and analyzing URL..."):
+                            scraped_info = scrape_and_summarize(url, model)
+                            if scraped_info:
+                                st.session_state.product_info = scraped_info
+                                st.success("Product info populated!")
+                            else:
+                                st.error("Failed to get product info from URL.")
+                    else:
+                        st.warning("Please enter a URL.")
+
+                p_name = st.text_input("Product Name", value=st.session_state.product_info.get("product_name", ""))
+                p_value = st.text_input("Main Benefit (Value)", value=st.session_state.product_info.get("product_value", ""))
+                p_price = st.text_input("Price / Pricing Model", value=st.session_state.product_info.get("product_price", ""))
+                p_diff = st.text_input("Competitive Edge", value=st.session_state.product_info.get("competitor_diff", ""))
+
             submitted = st.form_submit_button("🚀 Start Call")
             if submitted:
                 st.session_state.lead_info = {
                     "bot_name": bot_name, "name": name, 
                     "company": company, "type": type_, "context": context
                 }
-                # Store Product Info
                 st.session_state.product_info = {
                     "product_name": p_name,
                     "product_value": p_value,
@@ -473,7 +497,6 @@ if mode == "🤖 Sales Bot CRM":
                 
             if not st.session_state.messages:
                 with st.spinner("AI warming up..."):
-                    # Pass Product Info
                     greeting = generate_greeting(model, nodes["start"], st.session_state.lead_info, st.session_state.product_info)
                 st.session_state.messages.append({"role": "assistant", "content": greeting})
                 st.rerun()
@@ -488,11 +511,24 @@ if mode == "🤖 Sales Bot CRM":
                 
                 if "EXIT" in intent:
                     outcome = "Success" if "close" in st.session_state.current_node else "Fail"
-                    save_lead_to_db(st.session_state.lead_info, st.session_state.messages, outcome)
+                    transcript = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages])
+                    lead_data = {
+                        "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "Name": st.session_state.lead_info.get("name"),
+                        "Company": st.session_state.lead_info.get("company"),
+                        "Type": st.session_state.lead_info.get("type"),
+                        "Context": st.session_state.lead_info.get("context"),
+                        "Pain_Point": "AI Analysis Pending",
+                        "Budget": "Unknown",
+                        "Outcome": outcome,
+                        "Summary": f"Call with {len(st.session_state.messages)} messages. {outcome}",
+                        "Archetype": st.session_state.current_archetype,
+                        "Transcript": transcript
+                    }
+                    add_lead(lead_data)
                     st.success("Call Saved!")
                     st.session_state.page = "dashboard"; st.rerun()
                 elif "STAY" in intent:
-                    # Pass Product Info
                     resp = generate_response(model, current_text, user_input, "STAY", st.session_state.lead_info, archetype, st.session_state.product_info)
                 else: # MOVE
                      if st.session_state.current_node not in st.session_state.visited_history:
@@ -504,11 +540,24 @@ if mode == "🤖 Sales Bot CRM":
                      if best_next is not None:
                         st.session_state.current_node = id_to_node[best_next]
                         new_text = nodes[st.session_state.current_node]
-                        # Pass Product Info
                         resp = generate_response(model, new_text, user_input, "MOVE", st.session_state.lead_info, archetype, st.session_state.product_info)
                      else:
                         resp = "Call finished."
-                        save_lead_to_db(st.session_state.lead_info, st.session_state.messages, "End of Script")
+                        transcript = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages])
+                        lead_data = {
+                            "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                            "Name": st.session_state.lead_info.get("name"),
+                            "Company": st.session_state.lead_info.get("company"),
+                            "Type": st.session_state.lead_info.get("type"),
+                            "Context": st.session_state.lead_info.get("context"),
+                            "Pain_Point": "AI Analysis Pending",
+                            "Budget": "Unknown",
+                            "Outcome": "End of Script",
+                            "Summary": f"Call with {len(st.session_state.messages)} messages. End of Script",
+                            "Archetype": st.session_state.current_archetype,
+                            "Transcript": transcript
+                        }
+                        add_lead(lead_data)
 
                 st.session_state.messages.append({"role": "assistant", "content": resp})
                 st.rerun()
