@@ -1,0 +1,70 @@
+{
+    "nodes": {
+        "start": "Привіт! Це AI-асистент SellMe. Маєте хвилинку?",
+        "qualification": "Скажіть, ви використовуєте CRM систему?",
+        "pitch_crm": "Круто! Наш AI інтегрується з вашою CRM і сам заповнює картки.",
+        "pitch_no_crm": "Зрозумів. Наш AI може працювати навіть без CRM, в Телеграмі.",
+        "price_question": "Скільки це коштує? - Це залежить від кількості менеджерів.",
+        "objection_expensive": "Дорого? А скільки ви втрачаєте на незакритих угодах?",
+        "discount_offer": "Можемо запропонувати тестовий період за 1$.",
+        "close_deal": "Домовились! Висилаю посилання на оплату.",
+        "exit_bad": "Добре, вибачте за турботу. Гарного дня."
+    },
+    "edges": [
+        {
+            "from": "start",
+            "to": "qualification",
+            "weight": 1
+        },
+        {
+            "from": "start",
+            "to": "exit_bad",
+            "weight": 100
+        },
+        {
+            "from": "qualification",
+            "to": "pitch_crm",
+            "weight": 2
+        },
+        {
+            "from": "qualification",
+            "to": "pitch_no_crm",
+            "weight": 2
+        },
+        {
+            "from": "pitch_crm",
+            "to": "price_question",
+            "weight": 2
+        },
+        {
+            "from": "pitch_no_crm",
+            "to": "price_question",
+            "weight": 3
+        },
+        {
+            "from": "price_question",
+            "to": "objection_expensive",
+            "weight": 5
+        },
+        {
+            "from": "price_question",
+            "to": "close_deal",
+            "weight": 10
+        },
+        {
+            "from": "objection_expensive",
+            "to": "exit_bad",
+            "weight": 50
+        },
+        {
+            "from": "objection_expensive",
+            "to": "discount_offer",
+            "weight": 1
+        },
+        {
+            "from": "discount_offer",
+            "to": "close_deal",
+            "weight": 1
+        }
+    ]
+}
