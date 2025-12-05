@@ -194,6 +194,31 @@ def generate_response(model, context, user_input, intent, lead_info, archetype):
         return model.generate_content(prompt).text.strip()
     except: return "..."
 
+def generate_greeting(model, start_node_text, lead_info):
+    """Генерує ПЕРШЕ повідомлення, щоб воно було живим"""
+    
+    prompt = f"""
+    ROLE: Professional Sales Rep named {lead_info['bot_name']}.
+    CLIENT: {lead_info['client_name']} from {lead_info['company']}.
+    TYPE: {lead_info['type']} ({lead_info['context']}).
+    
+    GOAL: Start the conversation based on this script instruction: "{start_node_text}".
+    
+    INSTRUCTIONS:
+    - If B2B Cold Call: Be formal, check if this is the right company, ask for the decision maker.
+    - If B2C: Be friendly, use the client's name directly.
+    - ALWAYS state your name ({lead_info['bot_name']}) and company (SellMe AI).
+    - Make it sound natural, not robotic.
+    - Language: Ukrainian.
+    
+    OUTPUT: Just the spoken greeting.
+    """
+    try:
+        return model.generate_content(prompt).text.strip()
+    except:
+        return f"Доброго дня, це {lead_info['bot_name']} з SellMe. Маєте хвилинку?"
+
+
 # --- UI COMPONENTS ---
 def draw_graph(graph_data, current_node, predicted_path):
     nodes = graph_data[3]
@@ -300,21 +325,36 @@ if st.session_state.page == "dashboard":
 
 # --- PAGE: SETUP ---
 elif st.session_state.page == "setup":
-    st.title("👤 Lead Setup")
+    st.title("👤 Налаштування Дзвінка")
+    
     with st.form("lead_form"):
-        c1, c2 = st.columns(2)
-        name = c1.text_input("Name", "John Doe")
-        company = c2.text_input("Company", "Acme Corp")
-        l_type = c1.selectbox("Type", ["B2B", "B2C"])
-        context = c2.selectbox("Context", ["Cold Call", "Warm Lead", "Follow-up"])
+        st.markdown("### 👨‍💼 Хто дзвонить?")
+        bot_name = st.text_input("Ваше ім'я (Менеджера)", "Олексій")
         
-        if st.form_submit_button("Start Call"):
-            st.session_state.lead_info = {"name": name, "company": company, "type": l_type, "context": context}
+        st.markdown("### 📞 Кому дзвонимо?")
+        c1, c2 = st.columns(2)
+        name = c1.text_input("Ім'я Клієнта", "Олександр")
+        company = c2.text_input("Компанія (для B2B)", "SoftServe")
+        
+        type_ = c1.selectbox("Тип бізнесу", ["B2B", "B2C"])
+        context = c2.selectbox("Контекст", ["Холодний дзвінок", "Теплий лід (заявка)", "Повторний дзвінок"])
+        
+        submitted = st.form_submit_button("🚀 Почати розмову")
+        
+        if submitted:
+            # Зберігаємо все, включаючи ім'я бота
+            st.session_state.lead_info = {
+                "bot_name": bot_name,
+                "client_name": name, 
+                "company": company, 
+                "type": type_, 
+                "context": context
+            }
             st.session_state.messages = []
             st.session_state.current_node = "start"
-            st.session_state.visited_history = []  # Reset visited history
-            st.session_state.checklist = {k:False for k in st.session_state.checklist} # Reset
+            st.session_state.checklist = {k:False for k in st.session_state.checklist}
             st.session_state.page = "chat"
+            st.session_state.visited_history = []
             st.rerun()
 
 # --- PAGE: CHAT ---
@@ -434,11 +474,15 @@ elif st.session_state.page == "chat":
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]): st.write(msg["content"])
             
+        # --- ГЕНЕРАЦІЯ ПЕРШОГО ПОВІДОМЛЕННЯ ---
         if not st.session_state.messages:
-            greeting = nodes["start"]
-            # Adapt greeting based on B2B/B2C
-            if st.session_state.lead_info.get('type') == 'B2B':
-                greeting = f"Доброго дня, це {st.session_state.lead_info.get('company', 'компанія')}? Мене звати..."
+            with st.spinner("AI готується до дзвінка..."):
+                start_instruction = nodes["start"]
+                # Викликаємо AI для генерації живого привітання
+                # lead_info keys might differ if coming from very old session, but setup ensures keys exist.
+                # Just in case, defaults from setup form are used.
+                greeting = generate_greeting(model, start_instruction, st.session_state.lead_info)
+                
             st.session_state.messages.append({"role": "assistant", "content": greeting})
             st.rerun()
 
