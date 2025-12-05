@@ -216,10 +216,18 @@ def draw_graph(graph_data, current_node, predicted_path):
 # --- MAIN APP ---
 st.sidebar.title("🛠️ SellMe Control")
 
-# --- API KEY SETUP (Cloud + Local) ---
-if "GOOGLE_API_KEY" in st.secrets:
-    api_key = st.secrets["GOOGLE_API_KEY"]
-else:
+# --- API KEY SETUP (Robust) ---
+api_key = None
+try:
+    # Try to get key from secrets (Cloud)
+    if "GOOGLE_API_KEY" in st.secrets:
+        api_key = st.secrets["GOOGLE_API_KEY"]
+except (FileNotFoundError, KeyError):
+    # Secrets not found (Local run) -> Do nothing, stay None
+    pass
+
+# Fallback to manual input if no key found yet
+if not api_key:
     api_key = st.sidebar.text_input("Google API Key", type="password")
 
 if st.sidebar.button("📊 Dashboard"): st.session_state.page = "dashboard"; st.rerun()
