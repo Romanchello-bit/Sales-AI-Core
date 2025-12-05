@@ -36,16 +36,6 @@
             "weight": 1000
         },
         {
-            "from": "hook_rejection",
-            "to": "qualification_needs",
-            "weight": 1
-        },
-        {
-            "from": "hook_rejection",
-            "to": "exit_fail",
-            "weight": 50
-        },
-        {
             "from": "qualification_needs",
             "to": "pain_followup",
             "weight": 1

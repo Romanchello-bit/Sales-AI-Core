@@ -110,8 +110,10 @@ def get_predicted_path(graph, start_id, target_id, id_to_node, node_to_id):
     if dist[target_id] == float('inf'): return []
     path = [target_id]
     curr = target_id
+    attempts = 0
     while curr != start_id and attempts < 200:
         found = False
+        attempts += 1
         for u in range(graph.num_vertices):
             for v, w in graph.adj_list[u]:
                 if v == curr and dist[v] == dist[u] + w:
@@ -122,32 +124,34 @@ def get_predicted_path(graph, start_id, target_id, id_to_node, node_to_id):
 
 def analyze_full_context(model, user_input, current_node, chat_history):
     """
-    Аналізує Інтент, Емоції та ПСИХОТИП клієнта.
+    Аналізує Інтент з налаштуванням "NEVER GIVE UP".
     """
-    history_text = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history[-4:]]) # Беремо останні 4 фрази для контексту
+    history_text = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history[-4:]])
     
     prompt = f"""
-    ROLE: Behavioral Psychologist & Sales Expert.
+    ROLE: World-Class Sales Psychologist.
     
     CONTEXT:
     Current Step: "{current_node}"
-    Recent Chat History:
-    {history_text}
-    User just said: "{user_input}"
+    User said: "{user_input}"
     
-    TASK 1: Detect User Archetype (Pattern). Choose ONE:
-    - DRIVER (Direct, impatient, results-oriented)
-    - ANALYST (Detail-oriented, asks 'how', skeptical)
-    - EXPRESSIVE (Emotional, enthusiastic, visionary)
-    - CONSERVATIVE (Risk-averse, slow, likes stability)
+    TASK: Determine Intent (MOVE, STAY, EXIT).
     
-    TASK 2: Analyze Intent (MOVE, STAY, EXIT).
+    CRITICAL RULES FOR INTENT:
+    1. **EXIT** triggers ONLY if user is HOSTILE or EXPLICITLY ends the call.
+       - Examples: "Stop calling me", "Fuck off", "Put me on blacklist", "Bye", "Hang up".
+    
+    2. **STAY** (Objection Handling) triggers for ANY resistance.
+       - Examples: "Not interested", "No time", "We have a vendor", "Too expensive", "Send info to mail".
+       - Even if they say "No" to the first question -> It is NOT an exit. It is an objection to handle!
+    
+    3. **MOVE** triggers only if user agrees or answers a question positively.
     
     OUTPUT JSON format:
     {{
         "archetype": "DRIVER" | "ANALYST" | "EXPRESSIVE" | "CONSERVATIVE",
         "intent": "MOVE" | "STAY" | "EXIT",
-        "reasoning": "Why you chose this archetype (1 short sentence)"
+        "reasoning": "Why?"
     }}
     """
     try:
@@ -155,7 +159,8 @@ def analyze_full_context(model, user_input, current_node, chat_history):
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(clean_text)
     except:
-        return {"archetype": "UNKNOWN", "intent": "STAY", "reasoning": "Error"}
+        # За замовчуванням STAY! Краще зайвий раз перепитати, ніж кинути слухавку.
+        return {"archetype": "UNKNOWN", "intent": "STAY", "reasoning": "Fallback safety"}
 
 def generate_response(model, instruction_text, user_input, intent, lead_info, archetype):
     """
@@ -603,11 +608,8 @@ elif st.session_state.page == "chat":
         # --- ГЕНЕРАЦІЯ ПЕРШОГО ПОВІДОМЛЕННЯ ---
         if not st.session_state.messages:
             with st.spinner("AI готується до дзвінка..."):
-                start_instruction = nodes["start"]
                 # Викликаємо AI для генерації живого привітання
-                # lead_info keys might differ if coming from very old session, but setup ensures keys exist.
-                # Just in case, defaults from setup form are used.
-                greeting = generate_greeting(model, start_instruction, st.session_state.lead_info)
+                greeting = generate_greeting(model, nodes["start"], st.session_state.lead_info)
                 
             st.session_state.messages.append({"role": "assistant", "content": greeting})
             st.rerun()
