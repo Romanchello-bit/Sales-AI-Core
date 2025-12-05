@@ -4,3 +4,6 @@ pandas
 graphviz
 gspread
 oauth2client
+matplotlib
+requests
+beautifulsoup4
