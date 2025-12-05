@@ -391,9 +391,27 @@ if mode == "🤖 Sales Bot CRM":
     # --- SETUP WITH PRODUCT INFO ---
     elif st.session_state.page == "setup":
         st.title("👤 Налаштування Дзвінка")
+        
+        c1, c2 = st.columns(2)
+        
+        with c2:
+            st.markdown("### 📦 Product / Service Info")
+            url = st.text_input("Product URL", placeholder="https://example.com/product")
+            if st.button("🤖 Fetch Product Info from URL"):
+                if url:
+                    with st.spinner("Fetching and analyzing URL..."):
+                        scraped_info = scrape_and_summarize(url, model)
+                        if scraped_info:
+                            st.session_state.product_info = scraped_info
+                            st.success("Product info populated!")
+                        else:
+                            st.error("Failed to get product info from URL.")
+                else:
+                    st.warning("Please enter a URL.")
+
         with st.form("lead_form"):
-            c1, c2 = st.columns(2)
-            with c1:
+            c1_form, c2_form = st.columns(2)
+            with c1_form:
                 st.markdown("### 👨‍💼 Lead Info")
                 bot_name = st.text_input("Ваше ім'я (Менеджера)", "Олексій")
                 name = st.text_input("Ім'я Клієнта", "Олександр")
@@ -403,22 +421,8 @@ if mode == "🤖 Sales Bot CRM":
                 if st.checkbox("🔍 Перевірити в базі"):
                     pass
 
-            with c2:
-                st.markdown("### 📦 Product / Service Info")
-                url = st.text_input("Product URL", placeholder="https://example.com/product")
-                
-                if st.button("🤖 Fetch Product Info from URL"):
-                    if url:
-                        with st.spinner("Fetching and analyzing URL..."):
-                            scraped_info = scrape_and_summarize(url, model)
-                            if scraped_info:
-                                st.session_state.product_info = scraped_info
-                                st.success("Product info populated!")
-                            else:
-                                st.error("Failed to get product info from URL.")
-                    else:
-                        st.warning("Please enter a URL.")
-
+            with c2_form:
+                st.markdown("### 📦 Product / Service Info (Editable)")
                 p_name = st.text_input("Product Name", value=st.session_state.product_info.get("product_name", ""))
                 p_value = st.text_input("Main Benefit (Value)", value=st.session_state.product_info.get("product_value", ""))
                 p_price = st.text_input("Price / Pricing Model", value=st.session_state.product_info.get("product_price", ""))
