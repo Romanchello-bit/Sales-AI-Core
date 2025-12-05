@@ -195,20 +195,24 @@ def generate_response(model, context, user_input, intent, lead_info, archetype):
     except: return "..."
 
 def generate_greeting(model, start_node_text, lead_info):
-    """Генерує ПЕРШЕ повідомлення, щоб воно було живим"""
+    """Генерує ПЕРШЕ повідомлення"""
+    
+    # Використовуємо .get(), щоб уникнути помилок, якщо ключа немає
+    bot_name = lead_info.get('bot_name', 'Олексій')
+    client_name = lead_info.get('name', 'Клієнт')  # <--- ТУТ ТЕЖ МАЄ БУТИ 'name'
+    company = lead_info.get('company', 'Компанія')
     
     prompt = f"""
-    ROLE: Professional Sales Rep named {lead_info['bot_name']}.
-    CLIENT: {lead_info['client_name']} from {lead_info['company']}.
-    TYPE: {lead_info['type']} ({lead_info['context']}).
+    ROLE: Professional Sales Rep named {bot_name}.
+    CLIENT: {client_name} from {company}.
+    TYPE: {lead_info.get('type')} ({lead_info.get('context')}).
     
-    GOAL: Start the conversation based on this script instruction: "{start_node_text}".
+    GOAL: Start conversation based on instruction: "{start_node_text}".
     
     INSTRUCTIONS:
-    - If B2B Cold Call: Be formal, check if this is the right company, ask for the decision maker.
-    - If B2C: Be friendly, use the client's name directly.
-    - ALWAYS state your name ({lead_info['bot_name']}) and company (SellMe AI).
-    - Make it sound natural, not robotic.
+    - Always state your name ({bot_name}) and company (SellMe AI).
+    - If B2B: Be formal.
+    - If B2C: Be friendly.
     - Language: Ukrainian.
     
     OUTPUT: Just the spoken greeting.
@@ -216,7 +220,7 @@ def generate_greeting(model, start_node_text, lead_info):
     try:
         return model.generate_content(prompt).text.strip()
     except:
-        return f"Доброго дня, це {lead_info['bot_name']} з SellMe. Маєте хвилинку?"
+        return f"Доброго дня, це {bot_name} з SellMe. Маєте хвилинку?"
 
 
 # --- UI COMPONENTS ---
@@ -345,7 +349,7 @@ elif st.session_state.page == "setup":
             # Зберігаємо все, включаючи ім'я бота
             st.session_state.lead_info = {
                 "bot_name": bot_name,
-                "client_name": name, 
+                "name": name,         # <--- ВИПРАВИЛИ НА "name"
                 "company": company, 
                 "type": type_, 
                 "context": context
