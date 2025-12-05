@@ -44,31 +44,22 @@ def bellman_ford_list(graph, start_node, visited_nodes=None, client_type="B2B", 
     return dist
 
 
-def bellman_ford_matrix(graph, start_node):
-    distances = {i: float('inf') for i in range(graph.num_vertices)}
-    distances[start_node] = 0
-    matrix = graph.get_matrix()
-    n = graph.num_vertices
+def bellman_ford_matrix(matrix, start_node):
+    """
+    Standard Bellman-Ford for Adjacency Matrix (O(V^3)).
+    optimized for "scientific comparison" against Adjacency List.
+    """
+    num_vertices = len(matrix)
+    dist = [float("inf")] * num_vertices
+    dist[start_node] = 0
     
-    # Relaxation steps
-    for _ in range(n - 1):
-        changed = False
-        for u in range(n):
-            for v in range(n):
+    # Relax edges |V| - 1 times
+    for _ in range(num_vertices - 1):
+        for u in range(num_vertices):
+            for v in range(num_vertices):
                 weight = matrix[u][v]
-                if weight is not None:
-                    if distances[u] != float('inf') and distances[u] + weight < distances[v]:
-                        distances[v] = distances[u] + weight
-                        changed = True
-        if not changed:
-            break
-            
-    # Negative cycle detection
-    for u in range(n):
-        for v in range(n):
-            weight = matrix[u][v]
-            if weight is not None:
-                if distances[u] != float('inf') and distances[u] + weight < distances[v]:
-                    return None # Negative cycle detected
-
-    return distances
+                if weight != float("inf"):
+                    if dist[u] != float("inf") and dist[u] + weight < dist[v]:
+                        dist[v] = dist[u] + weight
+                        
+    return dist

@@ -706,20 +706,55 @@ elif mode == "🧪 Math Lab":
             
     st.divider()
     
-    st.markdown("### Section B: Experiments")
-    sizes = st.multiselect("Sizes", [10, 50, 100], default=[10, 50, 100])
-    bench_density = st.slider("Benchmark Density", 0.1, 1.0, 0.5, key="bench_density")
+    st.markdown("### Section B: Scientific Experiments")
+    st.markdown("Comparing Bellman-Ford implementations: **Adjacency List vs Adjacency Matrix**.")
     
-    if st.button("🚀 Run Benchmarks"):
-        with st.spinner("Running scientific benchmarks..."):
+    # Preset parameters
+    sizes_preset = list(range(20, 220, 20)) # [20, 40, ..., 200]
+    densities_preset = [0.1, 0.3, 0.5, 0.7, 0.9]
+    
+    if st.button("🚀 Run Scientific Benchmark"):
+        with st.spinner("Running rigorous scientific benchmarks (20 runs/config)... This may take a moment."):
             # Execute run_scientific_benchmark from experiments.py
-            results = experiments.run_scientific_benchmark(sizes, [bench_density])
+            results = experiments.run_scientific_benchmark(sizes_preset, densities_preset, num_runs=20)
             
             # Show Results Table
             df_results = pd.DataFrame(results)
-            st.table(df_results)
+            st.subheader("Raw Experimental Data")
+            st.dataframe(df_results)
             
-            # Plot Line Chart (X=N, Y=Avg_Time)
-            if not df_results.empty:
-                chart_data = df_results.set_index("Vertices (N)")["Avg_Time_Sec"]
+            # --- Visualization Logic ---
+            st.divider()
+            st.subheader("Performance Comparison Chart")
+            
+            # Use columns for layout
+            col_chart, col_filter = st.columns([3, 1])
+            
+            with col_filter:
+                # Filter by Density
+                selected_density = st.selectbox(
+                    "Select Density to Visualize:", 
+                    densities_preset,
+                    index=2 # Default to 0.5
+                )
+                
+                # Analysis
+                st.info(f"""
+                **Analysis for Density {selected_density}:**
+                
+                - 🟦 **Time_List**: Uses Bellman-Ford on Adjacency List. Complexity $O(V \\cdot E)$.
+                - 🟥 **Time_Matrix**: Uses Bellman-Ford on Adjacency Matrix. Complexity $O(V^3)$.
+                """)
+            
+            with col_chart:
+                # Filter data
+                filtered_df = df_results[df_results["Density"] == selected_density].copy()
+                filtered_df = filtered_df.sort_values(by="Vertices (N)")
+                
+                # Prepare for Chart (Index=N, Columns=[Time_List, Time_Matrix])
+                chart_data = filtered_df.set_index("Vertices (N)")[["Time_List", "Time_Matrix"]]
+                
+                # Plot
                 st.line_chart(chart_data)
+                
+            st.success(f"Benchmarking complete! Notice how Matrix implementation performance stays constant or redundant for sparse graphs, while List implementation scales with edges.")

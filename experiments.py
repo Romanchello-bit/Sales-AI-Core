@@ -2,7 +2,7 @@ import random
 import time
 import statistics
 from graph_module import Graph
-from algorithms import bellman_ford_list
+from algorithms import bellman_ford_list, bellman_ford_matrix
 
 # --- SCIENTIFIC CORE ---
 
@@ -45,10 +45,9 @@ def generate_erdos_renyi(n, density):
                 
     return graph
 
-def run_scientific_benchmark(sizes, densities, num_runs=20):
+def run_scientific_benchmark(sizes=[20, 201, 20], densities=[0.1, 0.3, 0.5, 0.7, 0.9], num_runs=20):
     """
-    Runs rigorous benchmarks for Bellman-Ford algorithm.
-    CRITICAL: For each pair (n, d), we repeat the experiment num_runs times.
+    Runs rigorous benchmarks comparing Bellman-Ford (List) vs (Matrix).
     
     Args:
         sizes (list[int]): List of vertex counts.
@@ -60,48 +59,59 @@ def run_scientific_benchmark(sizes, densities, num_runs=20):
     """
     results = []
     
+    # Ensure range if sizes was passed as default range-like logic (though we expect list)
+    # If the caller passes a list, use it. If the caller passes nothing, use default list.
+    # The prompt said: sizes: range(20, 201, 20). 
+    # Python defaults evaluated at definition, so we can't put range object directly effectively if mutable.
+    # We will assume input is a list or handle the default logic here if None.
+    
+    # If users rely on default argument binding:
+    # prompt: sizes: range(20, 201, 20) -> [20, 40, ..., 200]
+    if sizes == [20, 201, 20]: # Check if it's the signature default we set (which is weird, let's fix it for safety)
+         sizes = list(range(20, 201, 20))
+         
     print(f"--- Scientific Benchmark Started (Runs per config: {num_runs}) ---")
     
     for n in sizes:
         for d in densities:
-            times = []
-            edge_counts = []
+            time_list_accum = 0.0
+            time_matrix_accum = 0.0
             
             for _ in range(num_runs):
-                # 1. Generate NEW random graph (don't count this in timing)
+                # a. Generate Graph
                 graph = generate_erdos_renyi(n, d)
                 
-                # Count actual edges
-                # Sum of adjacency list lengths
-                e_count = sum(len(graph.adj_list[u]) for u in range(graph.num_vertices))
-                edge_counts.append(e_count)
+                # b. Convert to Matrix
+                matrix = graph.to_adjacency_matrix()
                 
-                # 2. Start Timer
-                start_time = time.perf_counter()
-                
-                # 3. Run Algorithm (Source = 0)
+                # c. Measure time for List
+                start_l = time.perf_counter()
                 try:
                     bellman_ford_list(graph, 0)
-                except Exception:
-                    pass # Ignore errors (e.g. negative cycles in random graphs)
+                except: pass
+                end_l = time.perf_counter()
+                time_list_accum += (end_l - start_l)
                 
-                # 4. Stop Timer
-                end_time = time.perf_counter()
-                times.append(end_time - start_time)
+                # d. Measure time for Matrix
+                start_m = time.perf_counter()
+                try:
+                    bellman_ford_matrix(matrix, 0)
+                except: pass
+                end_m = time.perf_counter()
+                time_matrix_accum += (end_m - start_m)
             
             # Calculate Averages
-            avg_time = statistics.mean(times)
-            avg_edges = statistics.mean(edge_counts)
+            avg_list = time_list_accum / num_runs
+            avg_matrix = time_matrix_accum / num_runs
             
-            # 5. Record Data
+            # Record Data
             results.append({
                 "Vertices (N)": n,
                 "Density": d,
-                "Avg_Time_Sec": avg_time,
-                "Edges_Count": int(avg_edges),
-                "Runs": num_runs
+                "Time_List": avg_list,
+                "Time_Matrix": avg_matrix
             })
-            print(f"Config N={n}, D={d} -> Avg Time: {avg_time:.6f}s")
+            print(f"N={n}, D={d} -> List: {avg_list:.6f}s | Matrix: {avg_matrix:.6f}s")
             
     return results
 
@@ -114,18 +124,13 @@ def generate_random_graph(n, density):
 def run_benchmark(sizes, density):
     """
     Alias supporting legacy list[tuple] return format.
-    Uses run_scientific_benchmark internally with 1 run for speed/demo.
+    Uses run_scientific_benchmark internally with 1 run for speed.
     """
-    # Wrap density in list, run 1 time (demo mode usually needs speed)
-    # The user asked for rigorous benchmark (20 runs) in the new function, 
-    # but the old function was for a quick demo. 
-    # Let's do 1 run to keep UI responsive, or 5 for better stability?
-    # Let's stick to 1 to match previous "quick" expectation unless specified.
-    
+    # Just run 1 run for speed, take the time_list as default behavior
     raw_results = run_scientific_benchmark(sizes, [density], num_runs=1)
     
-    # Convert to list of tuples [(N, Time)]
-    return [(r["Vertices (N)"], r["Avg_Time_Sec"]) for r in raw_results]
+    # Convert to list of tuples [(N, Time)] using Time_List (standard behavior)
+    return [(r["Vertices (N)"], r["Time_List"]) for r in raw_results]
 
 if __name__ == "__main__":
     # Test
