@@ -197,20 +197,61 @@ def generate_response(model, context, user_input, intent, lead_info, archetype):
 def draw_graph(graph_data, current_node, predicted_path):
     nodes = graph_data[3]
     edges = graph_data[4]
-    dot = graphviz.Digraph()
-    dot.attr(rankdir='LR', splines='ortho')
-    dot.attr('node', shape='box', style='rounded,filled', fontname='Arial', fontsize='10')
     
+    dot = graphviz.Digraph()
+    
+    # --- ГОЛОВНА ЗМІНА ТУТ ---
+    # rankdir='TB' -> Top to Bottom (Вертикально)
+    # splines='ortho' -> ламані лінії (прямі кути), виглядає охайніше
+    # nodesep='0.6' -> горизонтальний відступ між сусідніми вузлами
+    # ranksep='0.8' -> вертикальний відступ між рівнями
+    dot.attr(rankdir='TB', splines='ortho', nodesep='0.6', ranksep='0.8')
+    
+    # Налаштування загального стилю вузлів для кращої читабельності
+    dot.attr('node', shape='box', style='rounded,filled', fontname='Arial', fontsize='11', height='0.6')
+    
+    # Малюємо вузли
     for n in nodes:
-        fill = '#F0F2F6'; color = '#BDC3C7'; pen = '1'
-        if n == current_node: fill = '#FF4B4B'; color = 'black'; pen = '2'
-        elif n in predicted_path: fill = '#FFF8E1'; color = '#F1C40F'
-        dot.node(n, label=n, fillcolor=fill, color=color, penwidth=pen)
-        
-    for e in edges:
+        # Базовий стиль (сірий)
+        fill = '#F0F2F6'
         color = '#BDC3C7'
-        if e["from"] in predicted_path and e["to"] in predicted_path: color = '#F1C40F'
-        dot.edge(e["from"], e["to"], color=color)
+        pen = '1'
+        fontcolor = 'black'
+        
+        # Якщо це поточний вузол (Яскраво червоний)
+        if n == current_node:
+            fill = '#FF4B4B'
+            color = 'black'
+            pen = '3' # Товстіша рамка
+            fontcolor = 'white' # Білий текст на червоному фоні
+            
+        # Якщо це частина "Золотого шляху" (Жовтий)
+        elif n in predicted_path:
+            fill = '#FFF8E1'
+            color = '#F1C40F'
+            pen = '2'
+            
+        dot.node(n, label=n, fillcolor=fill, color=color, penwidth=pen, fontcolor=fontcolor)
+        
+    # Малюємо ребра (стрілочки)
+    for e in edges:
+        color = '#BDC3C7' # Базовий сірий для стрілок
+        pen = '1'
+        
+        # Якщо стрілка веде по золотому шляху - підсвічуємо її
+        if e["from"] in predicted_path and e["to"] in predicted_path:
+            # Додаткова перевірка: підсвічуємо тільки якщо вони йдуть підряд у шляху
+            try:
+                idx1 = predicted_path.index(e["from"])
+                idx2 = predicted_path.index(e["to"])
+                if idx2 == idx1 + 1:
+                    color = '#F1C40F' # Золотий
+                    pen = '2'
+            except ValueError:
+                pass # Якщо раптом вузол не в списку, ігноруємо
+                
+        dot.edge(e["from"], e["to"], color=color, penwidth=pen)
+        
     return dot
 
 # --- MAIN APP ---
