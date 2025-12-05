@@ -1,14 +1,20 @@
 {
     "nodes": {
-        "start": "Привіт! Це AI-асистент SellMe. Маєте хвилинку?",
-        "qualification": "Скажіть, ви використовуєте CRM систему?",
-        "pitch_crm": "Круто! Наш AI інтегрується з вашою CRM і сам заповнює картки.",
-        "pitch_no_crm": "Зрозумів. Наш AI може працювати навіть без CRM, в Телеграмі.",
-        "price_question": "Скільки це коштує? - Це залежить від кількості менеджерів.",
-        "objection_expensive": "Дорого? А скільки ви втрачаєте на незакритих угодах?",
-        "discount_offer": "Можемо запропонувати тестовий період за 1$.",
-        "close_deal": "Домовились! Висилаю посилання на оплату.",
-        "exit_bad": "Добре, вибачте за турботу. Гарного дня."
+        "start": "Привіт! Це AI-асистент SellMe. У нас є рішення, що піднімає продажі на 30%. Маєте хвилинку дізнатись як?",
+        "objection_busy": "Розумію, часу обмаль. Але це займе всього 30 секунд, а зекономить вам години. Тільки одне питання: як ви зараз шукаєте клієнтів?",
+        "qualification": "Скажіть, ви зараз використовуєте якусь CRM чи ведете все в Excel/блокноті?",
+        "tech_shame": "Ох, Excel — це класика, але ж уявіть, скільки лідів там губиться! А якби система сама нагадувала про кожного клієнта?",
+        "tech_praise": "Круто, що у вас є CRM! Але чи заповнюють її менеджери руками? Наш AI робить це автоматично.",
+        "pitch_value": "Суть проста: SellMe слухає розмову і сам створює угоду в CRM. Ви економите 2 години в день. Звучить цікаво?",
+        "objection_trust": "Звучить надто добре, щоб бути правдою? Розумію. Ми теж так думали, поки не побачили кейс компанії 'SoftGroup', яка скоротила штат вдвічі, зберігши прибуток.",
+        "objection_competitor": "А, ви про [Конкурента]? Вони молодці. Але у них ви платите за кожного юзера, а у нас — безліміт. Навіщо переплачувати?",
+        "price_reveal": "Вартість всього 50$ на місяць за всю команду. Це дешевше, ніж кава для офісу.",
+        "objection_expensive": "50$ — це дорого? Давайте порахуємо. Якщо AI врятує хоча б одну угоду на місяць, він вже окупився в 10 разів. Хіба ні?",
+        "objection_think": "Розумію, треба подумати. Але поки ви думаєте, ваші конкуренти вже впроваджують AI. Може, просто спробуємо безкоштовний тиждень?",
+        "soft_push": "Дивіться, ви нічим не ризикуєте. Я можу відкрити доступ прямо зараз без картки. Спробуємо?",
+        "close_deal": "Чудово! Ви мудрий керівник. Диктуйте пошту, куди скинути доступ.",
+        "exit_bad": "Добре. Якщо захочете автоматизувати хаос — ми тут. Гарного дня.",
+        "exit_later": "Окей, я наберу вас через місяць, коли вам набридне заповнювати звіти руками. До зв'язку!"
     },
     "edges": [
         {
@@ -18,53 +24,128 @@
         },
         {
             "from": "start",
+            "to": "objection_busy",
+            "weight": 5
+        },
+        {
+            "from": "start",
             "to": "exit_bad",
             "weight": 100
         },
         {
-            "from": "qualification",
-            "to": "pitch_crm",
+            "from": "objection_busy",
+            "to": "qualification",
             "weight": 2
         },
         {
-            "from": "qualification",
-            "to": "pitch_no_crm",
-            "weight": 2
-        },
-        {
-            "from": "pitch_crm",
-            "to": "price_question",
-            "weight": 2
-        },
-        {
-            "from": "pitch_no_crm",
-            "to": "price_question",
-            "weight": 3
-        },
-        {
-            "from": "price_question",
-            "to": "objection_expensive",
-            "weight": 5
-        },
-        {
-            "from": "price_question",
-            "to": "close_deal",
+            "from": "objection_busy",
+            "to": "exit_later",
             "weight": 10
         },
         {
-            "from": "objection_expensive",
+            "from": "qualification",
+            "to": "tech_shame",
+            "weight": 2
+        },
+        {
+            "from": "qualification",
+            "to": "tech_praise",
+            "weight": 2
+        },
+        {
+            "from": "qualification",
+            "to": "objection_trust",
+            "weight": 5
+        },
+        {
+            "from": "tech_shame",
+            "to": "pitch_value",
+            "weight": 1
+        },
+        {
+            "from": "tech_praise",
+            "to": "pitch_value",
+            "weight": 1
+        },
+        {
+            "from": "pitch_value",
+            "to": "price_reveal",
+            "weight": 2
+        },
+        {
+            "from": "pitch_value",
+            "to": "objection_competitor",
+            "weight": 4
+        },
+        {
+            "from": "pitch_value",
+            "to": "objection_trust",
+            "weight": 4
+        },
+        {
+            "from": "objection_trust",
+            "to": "pitch_value",
+            "weight": 2
+        },
+        {
+            "from": "objection_trust",
+            "to": "soft_push",
+            "weight": 3
+        },
+        {
+            "from": "objection_competitor",
+            "to": "price_reveal",
+            "weight": 2
+        },
+        {
+            "from": "objection_competitor",
             "to": "exit_bad",
             "weight": 50
         },
         {
+            "from": "price_reveal",
+            "to": "close_deal",
+            "weight": 10
+        },
+        {
+            "from": "price_reveal",
+            "to": "objection_expensive",
+            "weight": 3
+        },
+        {
+            "from": "price_reveal",
+            "to": "objection_think",
+            "weight": 4
+        },
+        {
             "from": "objection_expensive",
-            "to": "discount_offer",
+            "to": "soft_push",
             "weight": 1
         },
         {
-            "from": "discount_offer",
+            "from": "objection_expensive",
+            "to": "exit_bad",
+            "weight": 20
+        },
+        {
+            "from": "objection_think",
+            "to": "soft_push",
+            "weight": 2
+        },
+        {
+            "from": "objection_think",
+            "to": "exit_later",
+            "weight": 5
+        },
+        {
+            "from": "soft_push",
             "to": "close_deal",
             "weight": 1
+        },
+        {
+            "from": "soft_push",
+            "to": "exit_later",
+            "weight": 10
         }
     ]
 }
