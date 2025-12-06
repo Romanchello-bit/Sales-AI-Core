@@ -1,6 +1,6 @@
 ---
 title: Sales AI Core
-emoji: 🤖
+emoji: 🚀
 colorFrom: blue
 colorTo: indigo
 sdk: streamlit
@@ -9,6 +9,9 @@ app_file: app.py
 pinned: false
 ---
 
-# Sales AI Core
+# Welcome to Streamlit!
 
-This project is a sophisticated AI-powered sales agent simulation and evolution platform, configured for Hugging Face Spaces.
+Edit `/src/streamlit_app.py` to customize this app to your heart's desire. :heart:
+
+If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
+forums](https://discuss.streamlit.io).
