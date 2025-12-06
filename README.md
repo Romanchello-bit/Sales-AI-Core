@@ -1,15 +1,12 @@
 ---
 title: Sales AI Core
 emoji: 🚀
-colorFrom: red
-colorTo: red
-sdk: docker
-app_port: 8501
-tags:
-- streamlit
+colorFrom: blue
+colorTo: indigo
+sdk: streamlit
+sdk_version: 1.31.0
+app_file: app.py
 pinned: false
-short_description: Streamlit template space
-license: mit
 ---
 
 # Welcome to Streamlit!
