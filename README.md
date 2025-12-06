@@ -2,27 +2,13 @@
 title: Sales AI Core
 emoji: 🤖
 colorFrom: blue
-colorTo: green
+colorTo: indigo
 sdk: streamlit
-sdk_version: 1.33.0
-python_version: 3.11
+sdk_version: 1.31.0
 app_file: app.py
+pinned: false
 ---
 
 # Sales AI Core
 
-This project is a sophisticated AI-powered sales agent simulation and evolution platform.
-
-## Features
-
-- **Sales Bot CRM:** An interactive chat interface to simulate sales calls.
-- **Evolution Hub:** A "Colosseum" where AI agents (sales scenarios) compete against each other. The system analyzes the results and evolves the most successful scenarios over generations.
-- **Math Lab:** A computational environment for graph theory experiments and algorithm benchmarking.
-
-## How to Use
-
-1.  Enter your Google API Key in the sidebar.
-2.  Select a mode:
-    - **Sales Bot CRM:** Practice sales calls.
-    - **Evolution Hub:** Run simulations and evolve new sales strategies.
-    - **Math Lab:** Experiment with graph algorithms.
+This project is a sophisticated AI-powered sales agent simulation and evolution platform, configured for Hugging Face Spaces.
