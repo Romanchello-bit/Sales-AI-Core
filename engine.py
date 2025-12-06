@@ -67,8 +67,10 @@ class SalesEngine:
         best_total_distance = float('inf')
         
         for neighbor_id, edge_weight in adj_list[current_id]:
-            # Total distance = edge weight + distance from neighbor to close_deal
-            total_distance = edge_weight + distances[close_deal_id]
+            # Compute distance from this neighbor to close_deal
+            neighbor_distances = bellman_ford_list(self.graph, neighbor_id)
+            to_close = neighbor_distances[close_deal_id]
+            total_distance = edge_weight + to_close
             if total_distance < best_total_distance:
                 best_total_distance = total_distance
                 best_next_id = neighbor_id

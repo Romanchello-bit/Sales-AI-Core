@@ -33,6 +33,8 @@ if "lead_info" not in st.session_state: st.session_state.lead_info = {}
 if "product_info" not in st.session_state: st.session_state.product_info = {}
 if "selected_scenario_id" not in st.session_state: st.session_state.selected_scenario_id = None
 if "visited_history" not in st.session_state: st.session_state.visited_history = []
+if "current_archetype" not in st.session_state: st.session_state.current_archetype = "UNKNOWN"
+if "reasoning" not in st.session_state: st.session_state.reasoning = ""
 
 # --- AI & GRAPH LOGIC ---
 @st.cache_resource
@@ -66,8 +68,7 @@ def load_graph_data():
 def analyze_full_context(model, user_input, current_node, chat_history):
     history_text = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history[-4:]])
     prompt = f"""
-    ROLE: World-Class Sales Psychologist.
-    CONTEXT: Current Step: "{current_node}", User said: "{user_input}"
+    ROLE: World-Class Sales Psychologist. CONTEXT: Current Step: "{current_node}", User said: "{user_input}"
     TASK: Determine Intent (MOVE, STAY, EXIT) and Archetype.
     OUTPUT JSON: {{"archetype": "...", "intent": "...", "reasoning": "..."}}
     """
@@ -86,20 +87,33 @@ def generate_response_stream(model, instruction_text, user_input, lead_info, arc
     elif archetype == "ANALYST": tone = "Logical, factual, detailed."
     elif archetype == "EXPRESSIVE": tone = "Energetic, inspiring, emotional."
     elif archetype == "CONSERVATIVE": tone = "Calm, supportive, reassuring."
-    product_context = ""
-    if product_info:
-        product_context = f"PRODUCT CONTEXT: You are selling: {product_info.get('product_name', 'Our Solution')}"
+    product_context = f"PRODUCT CONTEXT: You are selling: {product_info.get('product_name', 'Our Solution')}" if product_info else ""
     prompt = f"""
-    ROLE: You are {bot_name}, a top-tier sales representative.
-    CLIENT: {client_name} from {company}.
-    CURRENT GOAL: "{instruction_text}"
-    USER SAID: "{user_input}"
-    ARCHETYPE: {archetype}
-    {product_context}
-    TASK: Generate the spoken response in Ukrainian. Adapt to the client's tone ({tone}).
-    OUTPUT: Just the spoken words.
+    ROLE: You are {bot_name}, a top-tier sales representative. CLIENT: {client_name} from {company}.
+    CURRENT GOAL: "{instruction_text}". USER SAID: "{user_input}". ARCHETYPE: {archetype}. {product_context}
+    TASK: Generate the spoken response in Ukrainian. Adapt to the client's tone ({tone}). OUTPUT: Just the spoken words.
     """
     return model.generate_content(prompt, stream=True)
+
+def draw_graph(graph_data, current_node, predicted_path):
+    nodes, edges = graph_data[3], graph_data[4]
+    dot = graphviz.Digraph()
+    dot.attr(rankdir='TB', splines='ortho', nodesep='0.3', ranksep='0.4', bgcolor='transparent')
+    dot.attr('node', shape='box', style='rounded,filled', fontname='Arial', fontsize='11', width='2.5', height='0.5', margin='0.1')
+    dot.attr('edge', fontname='Arial', fontsize='9', arrowsize='0.6')
+    for n in nodes:
+        fill, color, pen, font = '#F7F9F9', '#BDC3C7', '1', '#424949'
+        if n == current_node: fill, color, pen, font = '#FF4B4B', '#922B21', '2', 'white'
+        elif n in predicted_path: fill, color, pen, font = '#FEF9E7', '#F1C40F', '1', 'black'
+        dot.node(n, label=n, fillcolor=fill, color=color, penwidth=pen, fontcolor=font)
+    for e in edges:
+        color, pen = '#D5D8DC', '1'
+        if e["from"] in predicted_path and e["to"] in predicted_path:
+             try:
+                 if predicted_path.index(e["to"]) == predicted_path.index(e["from"]) + 1: color, pen = '#F1C40F', '2.5'
+             except: pass
+        dot.edge(e["from"], e["to"], color=color, penwidth=pen)
+    return dot
 
 # --- MAIN APP ---
 init_db()
@@ -108,9 +122,7 @@ mode = st.sidebar.radio("Mode", ["🤖 Sales Bot CRM", "⚔️ Evolution Hub", "
 
 api_key = st.sidebar.text_input("Google API Key", type="password", help="Required for all modes.")
 if not api_key:
-    st.warning("Please enter your Google API Key to proceed.")
-    st.stop()
-
+    st.warning("Please enter your Google API Key to proceed."); st.stop()
 if not configure_genai(api_key):
     st.stop()
 
@@ -120,8 +132,7 @@ if mode == "🤖 Sales Bot CRM":
     st.title("🤖 Sales Bot CRM")
     graph_data = load_graph_data()
     if graph_data[0] is None:
-        st.error("sales_script.json not found. CRM mode requires it.")
-        st.stop()
+        st.error("sales_script.json not found. CRM mode requires it."); st.stop()
     graph, node_to_id, id_to_node, nodes, edges = graph_data
 
     if st.sidebar.button("📊 Dashboard"): st.session_state.page = "dashboard"; st.rerun()
@@ -131,75 +142,60 @@ if mode == "🤖 Sales Bot CRM":
         st.header("Dashboard")
         data, stats = get_analytics()
         if data is not None and not data.empty:
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Total Calls", stats["total"])
-            c2.metric("Success Rate", f"{stats['success_rate']}%")
-            c3.metric("AI Learning Iterations", "v1.3")
-        else:
-            st.info("No calls in the database yet.")
+            c1, c2, c3 = st.columns(3); c1.metric("Total Calls", stats["total"]); c2.metric("Success Rate", f"{stats['success_rate']}%"); c3.metric("AI Learning Iterations", "v1.4")
+        else: st.info("No calls in the database yet.")
 
     elif st.session_state.page == "setup":
         st.header("Setup New Call")
         with st.form("setup_form"):
-            bot_name = st.text_input("Your Name", value="Олексій")
-            client_name = st.text_input("Client Name", value="Олександр")
-            company = st.text_input("Company", value="SoftServe")
+            bot_name = st.text_input("Your Name", value="Олексій"); client_name = st.text_input("Client Name", value="Олександр"); company = st.text_input("Company", value="SoftServe")
             submitted = st.form_submit_button("🚀 Start Call")
             if submitted:
                 st.session_state.lead_info = {"name": client_name, "bot_name": bot_name, "company": company}
-                st.session_state.page = "chat"
-                st.session_state.messages = []
-                st.session_state.current_node = "start"
-                st.session_state.visited_history = []
+                st.session_state.page = "chat"; st.session_state.messages = []; st.session_state.current_node = "start"; st.session_state.visited_history = []
                 st.rerun()
 
     elif st.session_state.page == "chat":
-        st.header(f"Call with {st.session_state.lead_info.get('name', 'client')}")
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+        col_chat, col_tools = st.columns([1.5, 1])
+        with col_chat:
+            st.header(f"Call with {st.session_state.lead_info.get('name', 'client')}")
+            for msg in st.session_state.messages:
+                with st.chat_message(msg["role"]): st.markdown(msg["content"])
+
+        with col_tools:
+            st.header("Analytics")
+            st.markdown("#### 🧠 Profile")
+            st.text(f"Archetype: {st.session_state.current_archetype} ({st.session_state.reasoning})")
+            st.markdown("#### 📊 Strategy")
+            path = bellman_ford_list(graph, node_to_id[st.session_state.current_node])
+            predicted_path = [id_to_node[i] for i, d in enumerate(path) if d != float('inf')] if path else []
+            st.graphviz_chart(draw_graph(graph_data, st.session_state.current_node, predicted_path), use_container_width=True)
 
         if prompt := st.chat_input("Your reply..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
+            with st.chat_message("user", container=col_chat): st.markdown(prompt)
 
             analysis = analyze_full_context(model, prompt, st.session_state.current_node, st.session_state.messages)
-            intent = analysis.get("intent", "STAY")
-            archetype = analysis.get("archetype", "UNKNOWN")
+            st.session_state.current_archetype = analysis.get("archetype", "UNKNOWN")
+            st.session_state.reasoning = analysis.get("reasoning", "")
+
+            if analysis.get("intent") == "MOVE":
+                if st.session_state.current_node not in st.session_state.visited_history: st.session_state.visited_history.append(st.session_state.current_node)
+                curr_id = node_to_id[st.session_state.current_node]
+                best_next = min(graph.adj_list[curr_id], key=lambda x: x[1], default=None)
+                if best_next: st.session_state.current_node = id_to_node[best_next[0]]
+                else: st.warning("End of script."); st.stop()
             
-            if intent == "EXIT":
-                outcome = "Success" if "close" in st.session_state.current_node else "Fail"
-                add_lead({"Date": datetime.now().strftime("%Y-%m-%d"), "Name": st.session_state.lead_info['name'], "Outcome": outcome, "Archetype": archetype})
-                st.success("Call ended and saved.")
-                time.sleep(2)
-                st.session_state.page = "dashboard"
-                st.rerun()
-            else:
-                if intent == "MOVE":
-                    if st.session_state.current_node not in st.session_state.visited_history:
-                        st.session_state.visited_history.append(st.session_state.current_node)
-                    curr_id = node_to_id[st.session_state.current_node]
-                    best_next = None; min_w = float('inf')
-                    for n, w in graph.adj_list[curr_id]:
-                        if w < min_w: min_w = w; best_next = n
-                    if best_next is not None:
-                        st.session_state.current_node = id_to_node[best_next]
-                    else:
-                        st.warning("End of script reached.")
-                        add_lead({"Date": datetime.now().strftime("%Y-%m-%d"), "Name": st.session_state.lead_info['name'], "Outcome": "End of Script", "Archetype": archetype})
-                        st.stop()
-                
-                instruction_text = nodes[st.session_state.current_node]
-                with st.chat_message("assistant"):
-                    message_placeholder = st.empty()
-                    full_response = ""
-                    stream = generate_response_stream(model, instruction_text, prompt, st.session_state.lead_info, archetype, st.session_state.product_info)
-                    for chunk in stream:
-                        full_response += (chunk.text or "")
-                        message_placeholder.markdown(full_response + "▌")
-                    message_placeholder.markdown(full_response)
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
+            instruction_text = nodes[st.session_state.current_node]
+            with st.chat_message("assistant", container=col_chat):
+                message_placeholder = st.empty()
+                full_response = ""
+                stream = generate_response_stream(model, instruction_text, prompt, st.session_state.lead_info, st.session_state.current_archetype)
+                for chunk in stream:
+                    full_response += (chunk.text or ""); message_placeholder.markdown(full_response + "▌")
+                message_placeholder.markdown(full_response)
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+            st.rerun()
 
 elif mode == "⚔️ Evolution Hub":
     st.title("⚔️ The Colosseum: AI Evolution Hub")
@@ -208,49 +204,35 @@ elif mode == "⚔️ Evolution Hub":
     with c1:
         num_simulations = st.number_input("Simulations to Run", 1, 50, 10)
         if st.button(f"🚀 Run {num_simulations} Simulations"):
-            log_container = st.container(height=200)
-            progress_bar = st.progress(0)
-            reports = []
+            log_container = st.container(height=200); progress_bar = st.progress(0); reports = []
             def progress_callback(report, current, total):
-                reports.append(report)
-                progress_bar.progress(current / total)
+                reports.append(report); progress_bar.progress(current / total)
                 persona = report['customer_persona']
                 log_container.write(f"Sim #{current}: Scen. {report['scenario_id']} vs {persona['archetype']} -> **{report['outcome']}** (Score: {report['score']})")
             colosseum.run_batch_simulations(model, num_simulations, progress_callback)
             st.success("Batch simulation complete!")
-            st.header("📊 Post-Battle Report")
-            report_df = pd.DataFrame(reports)
-            best_id = report_df.groupby('scenario_id')['score'].mean().idxmax()
-            worst_id = report_df.groupby('scenario_id')['score'].mean().idxmin()
-            st.metric("Most Effective Scenario", f"ID: {best_id}", f"{report_df[report_df['scenario_id'] == best_id]['score'].mean():.2f} avg score")
-            st.metric("Least Effective Scenario", f"ID: {worst_id}", f"{report_df[report_df['scenario_id'] == worst_id]['score'].mean():.2f} avg score")
+            if reports:
+                st.header("📊 Post-Battle Report")
+                report_df = pd.DataFrame(reports)
+                best_id = report_df.groupby('scenario_id')['score'].mean().idxmax()
+                worst_id = report_df.groupby('scenario_id')['score'].mean().idxmin()
+                st.metric("Most Effective Scenario", f"ID: {best_id}", f"{report_df[report_df['scenario_id'] == best_id]['score'].mean():.2f} avg score")
+                st.metric("Least Effective Scenario", f"ID: {worst_id}", f"{report_df[report_df['scenario_id'] == worst_id]['score'].mean():.2f} avg score")
             st.cache_data.clear()
     with c2:
         if st.button("🧬 Run Evolution Cycle"):
-            with st.spinner("Running evolution..."):
-                evolution.run_evolution_cycle(model)
-            st.success("Evolution complete!")
-            st.cache_data.clear()
+            with st.spinner("Running evolution..."): evolution.run_evolution_cycle(model)
+            st.success("Evolution complete!"); st.cache_data.clear()
 
-    st.header("🏆 Scenarios Leaderboard")
-    scenarios_df = get_all_scenarios_with_stats()
-    st.dataframe(scenarios_df)
-    
-    st.header("🕵️ Scenario Inspector")
+    st.header("🏆 Scenarios Leaderboard"); scenarios_df = get_all_scenarios_with_stats(); st.dataframe(scenarios_df)
     if not scenarios_df.empty:
+        st.header("🕵️ Scenario Inspector")
         selected_id = st.selectbox("Select Scenario ID:", scenarios_df['id'])
         if selected_id:
             c1, c2 = st.columns(2)
-            with c1:
-                st.subheader(f"📜 Graph for Scenario {selected_id}")
-                st.json(get_scenario(selected_id), height=400)
-            with c2:
-                st.subheader("👍👎 Phrase Analytics")
-                st.dataframe(get_phrase_analytics_for_scenario(selected_id))
-    else:
-        st.info("No scenarios to display.")
+            with c1: st.subheader(f"📜 Graph for Scenario {selected_id}"); st.json(get_scenario(selected_id), height=400)
+            with c2: st.subheader("👍👎 Phrase Analytics"); st.dataframe(get_phrase_analytics_for_scenario(selected_id))
 
 elif mode == "🧪 Math Lab":
     st.title("🧪 Computational Math Lab")
-    # ... (Full Math Lab logic restored here)
     st.info("Math Lab is ready.")
