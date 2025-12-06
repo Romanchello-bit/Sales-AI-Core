@@ -2,3 +2,7 @@ altair
 pandas
 streamlit
 google-generativeai
+graphviz
+beautifulsoup4
+requests
+matplotlib
