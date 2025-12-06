@@ -61,7 +61,7 @@ class SalesEngine:
             return current_step_name, self.node_text[current_step_name]
         
         # Find the best immediate next step
-        # Look at all neighbors of current node and pick the one with shortest total distance to close_deal
+        # Look at all neighbors of current node and pick the one with the shortest total distance to close_deal
         adj_list = self.graph.get_list()
         best_next_id = None
         best_total_distance = float('inf')
