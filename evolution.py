@@ -13,7 +13,7 @@ def run_evolution_cycle(model, top_n_champions=2, num_mutants=2, num_hybrids=1):
     """
     print("--- Starting Evolution Cycle ---")
     
-    with sqlite3.connect(database.DB_FILE) as conn:
+    with database.get_connection() as conn:
         scenarios_df = pd.read_sql_query(
             "SELECT * FROM scenarios ORDER BY fitness_score DESC", conn
         )

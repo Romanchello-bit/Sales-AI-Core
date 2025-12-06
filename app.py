@@ -35,6 +35,7 @@ if "selected_scenario_id" not in st.session_state: st.session_state.selected_sce
 if "visited_history" not in st.session_state: st.session_state.visited_history = []
 if "current_archetype" not in st.session_state: st.session_state.current_archetype = "UNKNOWN"
 if "reasoning" not in st.session_state: st.session_state.reasoning = ""
+if 'lab_graph' not in st.session_state: st.session_state.lab_graph = None
 
 # --- AI & GRAPH LOGIC ---
 @st.cache_resource
@@ -115,6 +116,31 @@ def draw_graph(graph_data, current_node, predicted_path):
         dot.edge(e["from"], e["to"], color=color, penwidth=pen)
     return dot
 
+def scrape_and_summarize(url, model):
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        st.error(f"Error fetching URL: {e}")
+        return None
+    soup = BeautifulSoup(response.content, 'html.parser')
+    text = soup.get_text(separator='\n', strip=True)
+    if len(text) < 100:
+        st.warning("Could not find enough text on the page.")
+        return None
+    prompt = f"""
+    Analyze the text from a website and extract product info in JSON format.
+    TEXT: {text[:4000]}
+    EXTRACT: "product_name", "product_value", "product_price", "competitor_diff".
+    Return only the JSON object.
+    """
+    try:
+        ai_response = model.generate_content(prompt)
+        return json.loads(ai_response.text.replace("```json", "").replace("```", "").strip())
+    except Exception as e:
+        st.error(f"Error processing AI response: {e}")
+        return None
+
 # --- MAIN APP ---
 init_db()
 st.sidebar.title("🛠️ SellMe Control")
@@ -147,11 +173,37 @@ if mode == "🤖 Sales Bot CRM":
 
     elif st.session_state.page == "setup":
         st.header("Setup New Call")
-        with st.form("setup_form"):
-            bot_name = st.text_input("Your Name", value="Олексій"); client_name = st.text_input("Client Name", value="Олександр"); company = st.text_input("Company", value="SoftServe")
+        c1, c2 = st.columns(2)
+        with c2:
+            st.markdown("### 📦 Product / Service Info")
+            url = st.text_input("Product URL", placeholder="https://example.com/product")
+            if st.button("🤖 Fetch Product Info from URL"):
+                if url:
+                    with st.spinner("Fetching and analyzing URL..."):
+                        scraped_info = scrape_and_summarize(model, url)
+                        if scraped_info:
+                            st.session_state.product_info = scraped_info
+                            st.success("Product info populated!")
+                else: st.warning("Please enter a URL.")
+        
+        with st.form("lead_form"):
+            c1_form, c2_form = st.columns(2)
+            with c1_form:
+                st.markdown("### 👨‍💼 Lead Info")
+                bot_name = st.text_input("Your Name", value="Олексій")
+                client_name = st.text_input("Client Name", value="Олександр")
+                company = st.text_input("Company", value="SoftServe")
+            with c2_form:
+                st.markdown("### 📦 Product / Service Info (Editable)")
+                p_name = st.text_input("Product Name", value=st.session_state.product_info.get("product_name", ""))
+                p_value = st.text_input("Main Benefit (Value)", value=st.session_state.product_info.get("product_value", ""))
+                p_price = st.text_input("Price / Pricing Model", value=st.session_state.product_info.get("product_price", ""))
+                p_diff = st.text_input("Competitive Edge", value=st.session_state.product_info.get("competitor_diff", ""))
+
             submitted = st.form_submit_button("🚀 Start Call")
             if submitted:
                 st.session_state.lead_info = {"name": client_name, "bot_name": bot_name, "company": company}
+                st.session_state.product_info = {"product_name": p_name, "product_value": p_value, "product_price": p_price, "competitor_diff": p_diff}
                 st.session_state.page = "chat"; st.session_state.messages = []; st.session_state.current_node = "start"; st.session_state.visited_history = []
                 st.rerun()
 
@@ -207,17 +259,19 @@ elif mode == "⚔️ Evolution Hub":
             log_container = st.container(height=200); progress_bar = st.progress(0); reports = []
             def progress_callback(report, current, total):
                 reports.append(report); progress_bar.progress(current / total)
-                persona = report['customer_persona']
-                log_container.write(f"Sim #{current}: Scen. {report['scenario_id']} vs {persona['archetype']} -> **{report['outcome']}** (Score: {report['score']})")
+                if 'error' not in report:
+                    persona = report['customer_persona']
+                    log_container.write(f"Sim #{current}: Scen. {report['scenario_id']} vs {persona['archetype']} -> **{report['outcome']}** (Score: {report['score']})")
             colosseum.run_batch_simulations(model, num_simulations, progress_callback)
             st.success("Batch simulation complete!")
             if reports:
                 st.header("📊 Post-Battle Report")
                 report_df = pd.DataFrame(reports)
-                best_id = report_df.groupby('scenario_id')['score'].mean().idxmax()
-                worst_id = report_df.groupby('scenario_id')['score'].mean().idxmin()
-                st.metric("Most Effective Scenario", f"ID: {best_id}", f"{report_df[report_df['scenario_id'] == best_id]['score'].mean():.2f} avg score")
-                st.metric("Least Effective Scenario", f"ID: {worst_id}", f"{report_df[report_df['scenario_id'] == worst_id]['score'].mean():.2f} avg score")
+                if not report_df.empty and 'scenario_id' in report_df.columns:
+                    best_id = report_df.groupby('scenario_id')['score'].mean().idxmax()
+                    worst_id = report_df.groupby('scenario_id')['score'].mean().idxmin()
+                    st.metric("Most Effective Scenario", f"ID: {best_id}", f"{report_df[report_df['scenario_id'] == best_id]['score'].mean():.2f} avg score")
+                    st.metric("Least Effective Scenario", f"ID: {worst_id}", f"{report_df[report_df['scenario_id'] == worst_id]['score'].mean():.2f} avg score")
             st.cache_data.clear()
     with c2:
         if st.button("🧬 Run Evolution Cycle"):
@@ -235,4 +289,53 @@ elif mode == "⚔️ Evolution Hub":
 
 elif mode == "🧪 Math Lab":
     st.title("🧪 Computational Math Lab")
-    st.info("Math Lab is ready.")
+    st.markdown("### Section A: Graph Inspector")
+    col1, col2 = st.columns(2)
+    n_nodes = col1.slider("N (Vertices)", 5, 15, 10)
+    density = col2.slider("Density", 0.1, 1.0, 0.5)
+    
+    if st.button("Generate Graph"):
+         st.session_state.lab_graph = experiments.generate_erdos_renyi(n_nodes, density)
+    
+    if st.session_state.lab_graph:
+        graph = st.session_state.lab_graph
+        tab1, tab2, tab3 = st.tabs(["Visual Graph", "Adjacency Matrix", "Adjacency List"])
+        with tab1:
+            st.subheader("Graphviz Visualization")
+            dot = graphviz.Digraph()
+            for u, neighbors in graph.adj_list.items():
+                dot.node(str(u), label=str(u))
+                for v, w in neighbors: dot.edge(str(u), str(v), label=str(w))
+            st.graphviz_chart(dot)
+        with tab2:
+            st.subheader("Adjacency Matrix (Heatmap)")
+            matrix = graph.to_adjacency_matrix()
+            df_matrix = pd.DataFrame(matrix)
+            df_heatmap = df_matrix.replace(float('inf'), None)
+            st.dataframe(df_heatmap.style.background_gradient(cmap="Blues", axis=None).format(na_rep="∞"))
+        with tab3:
+            st.subheader("Adjacency List")
+            st.write(graph.adj_list)
+            
+    st.divider()
+    st.markdown("### Section B: Scientific Experiments")
+    st.markdown("Comparing Bellman-Ford implementations: **Adjacency List vs Adjacency Matrix**.")
+    sizes_preset = list(range(20, 120, 20)) 
+    densities_preset = [0.2, 0.5, 0.8]
+    
+    if st.button("🚀 Run Scientific Benchmark"):
+        with st.spinner("Running benchmarks... This may take a while."):
+            results = experiments.run_scientific_benchmark(sizes_preset, densities_preset, num_runs=3)
+            df_results = pd.DataFrame(results)
+            st.subheader("Raw Data")
+            st.dataframe(df_results)
+            st.divider()
+            
+            c_chart, c_filter = st.columns([3, 1])
+            with c_filter:
+                sel_density = st.selectbox("Density:", densities_preset, index=1)
+            with c_chart:
+                st.subheader("Benchmark Results")
+                filtered_df = df_results[df_results["Density"] == sel_density].sort_values("Vertices (N)")
+                st.line_chart(filtered_df.set_index("Vertices (N)")[["Time_List", "Time_Matrix"]])
+            st.success("Benchmarking complete!")

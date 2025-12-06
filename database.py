@@ -5,9 +5,18 @@ import streamlit as st
 
 DB_FILE = "leads.db"
 
+def get_connection():
+    """Create a SQLite connection with safe defaults (foreign keys on)."""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute("PRAGMA foreign_keys = ON")
+    except Exception:
+        pass
+    return conn
+
 def init_db():
     """Initializes all tables for the application."""
-    with sqlite3.connect(DB_FILE) as conn:
+    with get_connection() as conn:
         cursor = conn.cursor()
         # Main leads table
         cursor.execute("""
@@ -57,7 +66,7 @@ def add_lead(lead_data):
     lead_data: dict with optional keys matching leads table columns.
     Returns inserted row id.
     """
-    with sqlite3.connect(DB_FILE) as conn:
+    with get_connection() as conn:
         cursor = conn.cursor()
         # Ensure DB exists
         init_db()
@@ -94,24 +103,30 @@ def add_lead(lead_data):
 @st.cache_data
 def get_all_leads():
     """Retrieves all leads from the database."""
-    with sqlite3.connect(DB_FILE) as conn:
+    with get_connection() as conn:
         return pd.read_sql_query("SELECT * FROM leads", conn)
 
 @st.cache_data
 def get_scenario(scenario_id):
     """Retrieves a specific scenario."""
-    with sqlite3.connect(DB_FILE) as conn:
+    with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT graph_json FROM scenarios WHERE id = ?", (scenario_id,))
+        cursor.execute("SELECT graph_json FROM scenarios WHERE id = ?", (int(scenario_id),))
         row = cursor.fetchone()
-        return json.loads(row[0]) if row else None
+        if not row:
+            return None
+        try:
+            return json.loads(row[0])
+        except Exception:
+            # Corrupt or invalid JSON stored
+            return None
 
 # --- Evolution Hub Read Functions ---
 
 @st.cache_data
 def get_all_scenarios_with_stats():
     """Retrieves all scenarios with aggregated stats."""
-    with sqlite3.connect(DB_FILE) as conn:
+    with get_connection() as conn:
         query = """
         SELECT
             s.id,
@@ -128,7 +143,21 @@ def get_all_scenarios_with_stats():
 @st.cache_data
 def get_simulations_for_scenario(scenario_id, limit=10):
     """Retrieves recent simulations for a specific scenario."""
-    with sqlite3.connect(DB_FILE) as conn:
+    # Sanitize inputs
+    try:
+        scenario_id = int(scenario_id)
+    except Exception:
+        scenario_id = -1
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 10
+    # Clamp limit to safe bounds
+    if limit < 1:
+        limit = 1
+    if limit > 100:
+        limit = 100
+    with get_connection() as conn:
         query = (
             "SELECT outcome, score, customer_persona FROM simulations "
             "WHERE scenario_id = ? ORDER BY id DESC LIMIT ?"
@@ -138,7 +167,11 @@ def get_simulations_for_scenario(scenario_id, limit=10):
 @st.cache_data
 def get_phrase_analytics_for_scenario(scenario_id):
     """Retrieves phrase analytics for a specific scenario."""
-    with sqlite3.connect(DB_FILE) as conn:
+    try:
+        scenario_id = int(scenario_id)
+    except Exception:
+        scenario_id = -1
+    with get_connection() as conn:
         query = (
             "SELECT phrase, impact, count, node_name FROM phrase_analytics "
             "WHERE scenario_id = ? ORDER BY count DESC"
@@ -149,7 +182,7 @@ def get_phrase_analytics_for_scenario(scenario_id):
 def add_scenario(graph_json, generation=0):
     """Insert a new scenario and return its ID."""
     init_db()
-    with sqlite3.connect(DB_FILE) as conn:
+    with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO scenarios (generation, fitness_score, graph_json) VALUES (?, ?, ?)",
@@ -168,7 +201,7 @@ def log_simulation(log_data):
     for k in required:
         if k not in log_data:
             raise ValueError(f"Missing field in log_data: {k}")
-    with sqlite3.connect(DB_FILE) as conn:
+    with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO simulations (scenario_id, customer_persona, outcome, score, transcript) "
@@ -195,7 +228,7 @@ def update_phrase_analytics(analytics_data):
     if not analytics_data:
         return 0
     updated = 0
-    with sqlite3.connect(DB_FILE) as conn:
+    with get_connection() as conn:
         cursor = conn.cursor()
         for item in analytics_data:
             scenario_id = item.get("scenario_id")
@@ -225,7 +258,7 @@ def update_phrase_analytics(analytics_data):
 
 def update_scenario_fitness(scenario_id):
     """Recompute and update the fitness score of a scenario as the average of its simulations' scores."""
-    with sqlite3.connect(DB_FILE) as conn:
+    with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT AVG(score) FROM simulations WHERE scenario_id = ?",
