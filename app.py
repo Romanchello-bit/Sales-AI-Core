@@ -66,13 +66,19 @@ def run_streamlit_app():
 
     @st.cache_resource
     def get_model():
+        if genai is None:
+            return None
         print("Initializing Generative Model...")
         return genai.GenerativeModel(MODEL_NAME)
 
     @st.cache_data
     def load_graph_data():
-        script_file = "sales_script.json"
-        if not os.path.exists(script_file): return None, None, None, None, None
+        # Resolve sales_script.json relative to this file so Streamlit launched from src/ works
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        script_file = os.path.join(base_dir, "sales_script.json")
+        if not os.path.exists(script_file):
+            # Do not stop the whole Streamlit app; return None so caller can show a friendly message
+            return None, None, None, None, None
         with open(script_file, "r", encoding="utf-8") as f: data = json.load(f)
         nodes, edges = data["nodes"], data["edges"]
         node_to_id = {name: i for i, name in enumerate(nodes.keys())}
@@ -85,6 +91,15 @@ def run_streamlit_app():
 
     def generate_response_stream(model, instruction_text, user_input, lead_info, archetype, product_info=None):
         if product_info is None: product_info = {}
+        # If model is not available, return a tiny generator with a fallback response
+        if model is None:
+            def _stub():
+                class Chunk:
+                    def __init__(self, text):
+                        self.text = text
+                yield Chunk("[AI unavailable — running in offline mode]")
+            return _stub()
+
         bot_name = lead_info.get('bot_name', 'Олексій')
         client_name = lead_info.get('name', 'Клієнт')
         company = lead_info.get('company', 'Компанія')
@@ -99,160 +114,130 @@ def run_streamlit_app():
         CURRENT GOAL: "{instruction_text}". USER SAID: "{user_input}". ARCHETYPE: {archetype}. {product_context}
         TASK: Generate the spoken response in Ukrainian. Adapt to the client's tone ({tone}). OUTPUT: Just the spoken words.
         """
-        return model.generate_content(prompt, stream=True)
-
-    def draw_graph(graph_data, current_node, predicted_path):
-        nodes, edges = graph_data[3], graph_data[4]
-        dot = graphviz.Digraph()
-        dot.attr(rankdir='TB', splines='ortho', nodesep='0.3', ranksep='0.4', bgcolor='transparent')
-        dot.attr('node', shape='box', style='rounded,filled', fontname='Arial', fontsize='11', width='2.5', height='0.5', margin='0.1')
-        dot.attr('edge', fontname='Arial', fontsize='9', arrowsize='0.6')
-        for n in nodes:
-            fill, color, pen, font = '#F7F9F9', '#BDC3C7', '1', '#424949'
-            if n == current_node: fill, color, pen, font = '#FF4B4B', '#922B21', '2', 'white'
-            elif n in predicted_path: fill, color, pen, font = '#FEF9E7', '#F1C40F', '1', 'black'
-            dot.node(n, label=n, fillcolor=fill, color=color, penwidth=pen, fontcolor=font)
-        for e in edges:
-            color, pen = '#D5D8DC', '1'
-            if e["from"] in predicted_path and e["to"] in predicted_path:
-                 try:
-                     if predicted_path.index(e["to"]) == predicted_path.index(e["from"]) + 1: color, pen = '#F1C40F', '2.5'
-                 except: pass
-            dot.edge(e["from"], e["to"], color=color, penwidth=pen)
-        return dot
-
-    def scrape_and_summarize(url, model):
         try:
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-        except requests.RequestException as e:
-            st.error(f"Error fetching URL: {e}")
-            return None
-        soup = BeautifulSoup(response.content, 'html.parser')
-        text = soup.get_text(separator='\n', strip=True)
-        if len(text) < 100:
-            st.warning("Could not find enough text on the page.")
-            return None
-        prompt = f"""
-        Analyze the text from a website and extract product info in JSON format.
-        TEXT: {text[:4000]}
-        EXTRACT: "product_name", "product_value", "product_price", "competitor_diff".
-        Return only the JSON object.
-        """
-        try:
-            ai_response = model.generate_content(prompt)
-            return json.loads(ai_response.text.replace("```json", "").replace("```", "").strip())
-        except Exception as e:
-            st.error(f"Error processing AI response: {e}")
-            return None
+            return model.generate_content(prompt, stream=True)
+        except Exception:
+            # Fallback if model call fails mid-run
+            def _stub_err():
+                class Chunk:
+                    def __init__(self, text):
+                        self.text = text
+                yield Chunk("[AI request failed — fallback response]")
+            return _stub_err()
 
     # --- MAIN APP ---
     init_db()
     st.sidebar.title("🛠️ SellMe Control")
     mode = st.sidebar.radio("Mode", ["🤖 Sales Bot CRM", "⚔️ Evolution Hub", "🧪 Math Lab"])
 
-    api_key = st.sidebar.text_input("Google API Key", type="password", help="Required for all modes.")
-    if not api_key:
-        st.warning("Please enter your Google API Key to proceed."); st.stop()
-    if not configure_genai(api_key):
-        st.stop()
-
-    model = get_model()
+    api_key = st.sidebar.text_input("Google API Key", type="password", help="Optional. Provide to enable Google Generative AI features.")
+    model = None
+    if api_key:
+        if genai is None:
+            st.error("google-generativeai package not available. AI features disabled.")
+        else:
+            if configure_genai(api_key):
+                model = get_model()
+            else:
+                st.error("Failed to configure Generative AI. Continuing with AI disabled.")
+    else:
+        st.info("Running without Google API Key — AI features are disabled. The UI (Sales Bot, Evolution Hub, Math Lab) will still be available.")
 
     if mode == "🤖 Sales Bot CRM":
         st.title("🤖 Sales Bot CRM")
         graph_data = load_graph_data()
         if graph_data[0] is None:
-            st.error("sales_script.json not found. CRM mode requires it."); st.stop()
-        graph, node_to_id, id_to_node, nodes, edges = graph_data
+            st.warning("sales_script.json not found. CRM features are disabled. Place 'sales_script.json' in the repository root to enable the Sales Bot CRM.")
+        else:
+            graph, node_to_id, id_to_node, nodes, edges = graph_data
 
-        if st.sidebar.button("📊 Dashboard"): st.session_state.page = "dashboard"; st.rerun()
-        if st.sidebar.button("📞 New Call"): st.session_state.page = "setup"; st.rerun()
+            if st.sidebar.button("📊 Dashboard"): st.session_state.page = "dashboard"; st.rerun()
+            if st.sidebar.button("📞 New Call"): st.session_state.page = "setup"; st.rerun()
 
-        if st.session_state.page == "dashboard":
-            st.header("Dashboard")
-            data, stats = get_analytics()
-            if data is not None and not data.empty:
-                c1, c2, c3 = st.columns(3); c1.metric("Total Calls", stats["total"]); c2.metric("Success Rate", f"{stats['success_rate']}%"); c3.metric("AI Learning Iterations", "v1.4")
-            else: st.info("No calls in the database yet.")
+            if st.session_state.page == "dashboard":
+                st.header("Dashboard")
+                data, stats = get_analytics()
+                if data is not None and not data.empty:
+                    c1, c2, c3 = st.columns(3); c1.metric("Total Calls", stats["total"]); c2.metric("Success Rate", f"{stats['success_rate']}%"); c3.metric("AI Learning Iterations", "v1.4")
+                else: st.info("No calls in the database yet.")
 
-        elif st.session_state.page == "setup":
-            st.header("Setup New Call")
-            c1, c2 = st.columns(2)
-            with c2:
-                st.markdown("### 📦 Product / Service Info")
-                url = st.text_input("Product URL", placeholder="https://example.com/product")
-                if st.button("🤖 Fetch Product Info from URL"):
-                    if url:
-                        with st.spinner("Fetching and analyzing URL..."):
-                            scraped_info = scrape_and_summarize(model, url)
-                            if scraped_info:
-                                st.session_state.product_info = scraped_info
-                                st.success("Product info populated!")
-                    else: st.warning("Please enter a URL.")
+            elif st.session_state.page == "setup":
+                st.header("Setup New Call")
+                c1, c2 = st.columns(2)
+                with c2:
+                    st.markdown("### 📦 Product / Service Info")
+                    url = st.text_input("Product URL", placeholder="https://example.com/product")
+                    if st.button("🤖 Fetch Product Info from URL"):
+                        if url:
+                            with st.spinner("Fetching and analyzing URL..."):
+                                scraped_info = scrape_and_summarize(model, url)
+                                if scraped_info:
+                                    st.session_state.product_info = scraped_info
+                                    st.success("Product info populated!")
+                        else: st.warning("Please enter a URL.")
 
-            with st.form("lead_form"):
-                c1_form, c2_form = st.columns(2)
-                with c1_form:
-                    st.markdown("### 👨‍💼 Lead Info")
-                    bot_name = st.text_input("Your Name", value="Олексій")
-                    client_name = st.text_input("Client Name", value="Олександр")
-                    company = st.text_input("Company", value="SoftServe")
-                with c2_form:
-                    st.markdown("### 📦 Product / Service Info (Editable)")
-                    p_name = st.text_input("Product Name", value=st.session_state.product_info.get("product_name", ""))
-                    p_value = st.text_input("Main Benefit (Value)", value=st.session_state.product_info.get("product_value", ""))
-                    p_price = st.text_input("Price / Pricing Model", value=st.session_state.product_info.get("product_price", ""))
-                    p_diff = st.text_input("Competitive Edge", value=st.session_state.product_info.get("competitor_diff", ""))
+                with st.form("lead_form"):
+                    c1_form, c2_form = st.columns(2)
+                    with c1_form:
+                        st.markdown("### 👨‍💼 Lead Info")
+                        bot_name = st.text_input("Your Name", value="Олексій")
+                        client_name = st.text_input("Client Name", value="Олександр")
+                        company = st.text_input("Company", value="SoftServe")
+                    with c2_form:
+                        st.markdown("### 📦 Product / Service Info (Editable)")
+                        p_name = st.text_input("Product Name", value=st.session_state.product_info.get("product_name", ""))
+                        p_value = st.text_input("Main Benefit (Value)", value=st.session_state.product_info.get("product_value", ""))
+                        p_price = st.text_input("Price / Pricing Model", value=st.session_state.product_info.get("product_price", ""))
+                        p_diff = st.text_input("Competitive Edge", value=st.session_state.product_info.get("competitor_diff", ""))
 
-                submitted = st.form_submit_button("🚀 Start Call")
-                if submitted:
-                    st.session_state.lead_info = {"name": client_name, "bot_name": bot_name, "company": company}
-                    st.session_state.product_info = {"product_name": p_name, "product_value": p_value, "product_price": p_price, "competitor_diff": p_diff}
-                    st.session_state.page = "chat"; st.session_state.messages = []; st.session_state.current_node = "start"; st.session_state.visited_history = []
+                    submitted = st.form_submit_button("🚀 Start Call")
+                    if submitted:
+                        st.session_state.lead_info = {"name": client_name, "bot_name": bot_name, "company": company}
+                        st.session_state.product_info = {"product_name": p_name, "product_value": p_value, "product_price": p_price, "competitor_diff": p_diff}
+                        st.session_state.page = "chat"; st.session_state.messages = []; st.session_state.current_node = "start"; st.session_state.visited_history = []
+                        st.rerun()
+
+            elif st.session_state.page == "chat":
+                col_chat, col_tools = st.columns([1.5, 1])
+                with col_chat:
+                    st.header(f"Call with {st.session_state.lead_info.get('name', 'client')}")
+                    for msg in st.session_state.messages:
+                        with st.chat_message(msg["role"]): st.markdown(msg["content"])
+
+                with col_tools:
+                    st.header("Analytics")
+                    st.markdown("#### 🧠 Profile")
+                    st.text(f"Archetype: {st.session_state.current_archetype} ({st.session_state.reasoning})")
+                    st.markdown("#### 📊 Strategy")
+                    path = bellman_ford_list(graph, node_to_id[st.session_state.current_node])
+                    predicted_path = [id_to_node[i] for i, d in enumerate(path) if d != float('inf')] if path else []
+                    st.graphviz_chart(draw_graph(graph_data, st.session_state.current_node, predicted_path), use_container_width=True)
+
+                if prompt := st.chat_input("Your reply..."):
+                    st.session_state.messages.append({"role": "user", "content": prompt})
+                    with st.chat_message("user", container=col_chat): st.markdown(prompt)
+
+                    analysis = analyze_full_context(model, prompt, st.session_state.current_node, st.session_state.messages)
+                    st.session_state.current_archetype = analysis.get("archetype", "UNKNOWN")
+                    st.session_state.reasoning = analysis.get("reasoning", "")
+
+                    if analysis.get("intent") == "MOVE":
+                        if st.session_state.current_node not in st.session_state.visited_history: st.session_state.visited_history.append(st.session_state.current_node)
+                        curr_id = node_to_id[st.session_state.current_node]
+                        best_next = min(graph.adj_list[curr_id], key=lambda x: x[1], default=None)
+                        if best_next: st.session_state.current_node = id_to_node[best_next[0]]
+                        else: st.warning("End of script."); st.stop()
+
+                    instruction_text = nodes[st.session_state.current_node]
+                    with st.chat_message("assistant", container=col_chat):
+                        message_placeholder = st.empty()
+                        full_response = ""
+                        stream = generate_response_stream(model, instruction_text, prompt, st.session_state.lead_info, st.session_state.current_archetype)
+                        for chunk in stream:
+                            full_response += (chunk.text or ""); message_placeholder.markdown(full_response + "▌")
+                        message_placeholder.markdown(full_response)
+                    st.session_state.messages.append({"role": "assistant", "content": full_response})
                     st.rerun()
-
-        elif st.session_state.page == "chat":
-            col_chat, col_tools = st.columns([1.5, 1])
-            with col_chat:
-                st.header(f"Call with {st.session_state.lead_info.get('name', 'client')}")
-                for msg in st.session_state.messages:
-                    with st.chat_message(msg["role"]): st.markdown(msg["content"])
-
-            with col_tools:
-                st.header("Analytics")
-                st.markdown("#### 🧠 Profile")
-                st.text(f"Archetype: {st.session_state.current_archetype} ({st.session_state.reasoning})")
-                st.markdown("#### 📊 Strategy")
-                path = bellman_ford_list(graph, node_to_id[st.session_state.current_node])
-                predicted_path = [id_to_node[i] for i, d in enumerate(path) if d != float('inf')] if path else []
-                st.graphviz_chart(draw_graph(graph_data, st.session_state.current_node, predicted_path), use_container_width=True)
-
-            if prompt := st.chat_input("Your reply..."):
-                st.session_state.messages.append({"role": "user", "content": prompt})
-                with st.chat_message("user", container=col_chat): st.markdown(prompt)
-
-                analysis = analyze_full_context(model, prompt, st.session_state.current_node, st.session_state.messages)
-                st.session_state.current_archetype = analysis.get("archetype", "UNKNOWN")
-                st.session_state.reasoning = analysis.get("reasoning", "")
-
-                if analysis.get("intent") == "MOVE":
-                    if st.session_state.current_node not in st.session_state.visited_history: st.session_state.visited_history.append(st.session_state.current_node)
-                    curr_id = node_to_id[st.session_state.current_node]
-                    best_next = min(graph.adj_list[curr_id], key=lambda x: x[1], default=None)
-                    if best_next: st.session_state.current_node = id_to_node[best_next[0]]
-                    else: st.warning("End of script."); st.stop()
-
-                instruction_text = nodes[st.session_state.current_node]
-                with st.chat_message("assistant", container=col_chat):
-                    message_placeholder = st.empty()
-                    full_response = ""
-                    stream = generate_response_stream(model, instruction_text, prompt, st.session_state.lead_info, st.session_state.current_archetype)
-                    for chunk in stream:
-                        full_response += (chunk.text or ""); message_placeholder.markdown(full_response + "▌")
-                    message_placeholder.markdown(full_response)
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
-                st.rerun()
 
     elif mode == "⚔️ Evolution Hub":
         st.title("⚔️ The Colosseum: AI Evolution Hub")
