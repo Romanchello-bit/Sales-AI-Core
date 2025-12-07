@@ -22,8 +22,10 @@ def run_experiments():
                 bellman_ford_list(g, 0)
                 t_list += (time.perf_counter() - start)
                 
+                # Convert graph to adjacency matrix for the matrix implementation
+                matrix = g.to_adjacency_matrix()
                 start = time.perf_counter()
-                bellman_ford_matrix(g, 0)
+                bellman_ford_matrix(matrix, 0)
                 t_matrix += (time.perf_counter() - start)
             
             avg_list = t_list / runs
@@ -54,7 +56,14 @@ def run_experiments():
     plt.tight_layout()
     plt.savefig('benchmark_results.png')
     print("\nBenchmark finished. Results saved to benchmark_results.png")
-    plt.show()
+
+    # Only show the figure if matplotlib backend is interactive
+    backend = plt.get_backend().lower()
+    if 'agg' not in backend and 'svg' not in backend and 'pdf' not in backend:
+        try:
+            plt.show()
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     run_experiments()
