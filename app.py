@@ -1,12 +1,24 @@
 import streamlit as st
-import graphviz
+# Optional Graphviz import guarded to avoid hard crash when not installed
+try:
+    import graphviz as graphviz
+    _GRAPHVIZ_AVAILABLE = True
+except Exception:
+    graphviz = None
+    _GRAPHVIZ_AVAILABLE = False
 import json
 import os
 import pandas as pd
 import time
 import random
 from datetime import datetime
-import google.generativeai as genai
+# Optional Generative AI import; app will show a clear error if missing
+try:
+    import google.generativeai as genai
+    _GENAI_AVAILABLE = True
+except Exception:
+    genai = None
+    _GENAI_AVAILABLE = False
 from graph_module import Graph
 from algorithms import bellman_ford_list
 from leads_manager import get_analytics
@@ -40,6 +52,9 @@ if 'lab_graph' not in st.session_state: st.session_state.lab_graph = None
 # --- AI & GRAPH LOGIC ---
 @st.cache_resource
 def configure_genai(api_key):
+    if not _GENAI_AVAILABLE:
+        st.error("google-generativeai is not installed. Please ensure dependencies are installed (requirements.txt).")
+        return False
     try:
         genai.configure(api_key=api_key)
         return True
@@ -97,6 +112,8 @@ def generate_response_stream(model, instruction_text, user_input, lead_info, arc
     return model.generate_content(prompt, stream=True)
 
 def draw_graph(graph_data, current_node, predicted_path):
+    if not _GRAPHVIZ_AVAILABLE:
+        return None
     nodes, edges = graph_data[3], graph_data[4]
     dot = graphviz.Digraph()
     dot.attr(rankdir='TB', splines='ortho', nodesep='0.3', ranksep='0.4', bgcolor='transparent')
@@ -221,7 +238,11 @@ if mode == "🤖 Sales Bot CRM":
             st.markdown("#### 📊 Strategy")
             path = bellman_ford_list(graph, node_to_id[st.session_state.current_node])
             predicted_path = [id_to_node[i] for i, d in enumerate(path) if d != float('inf')] if path else []
-            st.graphviz_chart(draw_graph(graph_data, st.session_state.current_node, predicted_path), use_container_width=True)
+            dot_chart = draw_graph(graph_data, st.session_state.current_node, predicted_path)
+            if dot_chart is not None:
+                st.graphviz_chart(dot_chart, use_container_width=True)
+            else:
+                st.warning("Graphviz is not installed. Skipping graph visualization.")
 
         if prompt := st.chat_input("Your reply..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
@@ -302,11 +323,15 @@ elif mode == "🧪 Math Lab":
         tab1, tab2, tab3 = st.tabs(["Visual Graph", "Adjacency Matrix", "Adjacency List"])
         with tab1:
             st.subheader("Graphviz Visualization")
-            dot = graphviz.Digraph()
-            for u, neighbors in graph.adj_list.items():
-                dot.node(str(u), label=str(u))
-                for v, w in neighbors: dot.edge(str(u), str(v), label=str(w))
-            st.graphviz_chart(dot)
+            if _GRAPHVIZ_AVAILABLE:
+                dot = graphviz.Digraph()
+                for u, neighbors in graph.adj_list.items():
+                    dot.node(str(u), label=str(u))
+                    for v, w in neighbors:
+                        dot.edge(str(u), str(v), label=str(w))
+                st.graphviz_chart(dot)
+            else:
+                st.warning("Graphviz is not installed. Skipping graph visualization.")
         with tab2:
             st.subheader("Adjacency Matrix (Heatmap)")
             matrix = graph.to_adjacency_matrix()
