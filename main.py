@@ -35,8 +35,8 @@ def run_experiments():
             print(f"{n:<10} {d:<10} {avg_list:.6f}        {avg_matrix:.6f}")
 
     # Plotting
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-    
+    _, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
     for d in densities:
         ax1.plot(sizes, results[d]['list'], marker='o', label=f'D={d}')
     ax1.set_title("Bellman-Ford (List)")

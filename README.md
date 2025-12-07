@@ -2,6 +2,58 @@
 
 This repository contains the core tooling and experiments for the Sales AI platform. The primary runnable product in this repository is a set of command-line experiments and visualization plots driven by `main.py` (benchmark and analysis runner).
 
+## Quick-start (Windows PowerShell)
+
+# Create and activate virtual environment, install deps, run main
+powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python main.py
+
+# Run tests
+powershell
+.\.venv\Scripts\Activate.ps1
+python -m unittest discover -v
+
+## Quick-start (Makefile - cross-platform with GNU make)
+
+# Create venv and install (on Windows use Git Bash or WSL to run make)
+make install
+
+# Run main
+make start
+
+# Run Streamlit UI
+make streamlit
+
+# Run tests
+make test
+
+## Devcontainer
+
+Open in VS Code Remote-Containers or Codespaces. The devcontainer builds a Docker image with Python 3.14 and Graphviz, creates `.venv` and installs `requirements.txt` during `postCreateCommand`.
+
+Activate venv inside the container:
+
+bash
+source .venv/bin/activate
+
+Start the app (inside the container):
+
+bash
+python main.py
+
+Or run the Streamlit UI:
+
+bash
+streamlit run src/streamlit_app.py --server.enableCORS false --server.enableXsrfProtection false
+
+## Notes
+- The Graphviz Python package requires the system `dot` binary (installed in the devcontainer Dockerfile).
+- Use the provided scripts in `scripts/` if you prefer PowerShell or shell helper scripts.
+
 ## Key entrypoints
 
 - `main.py` — runs benchmark experiments (Bellman-Ford comparisons) and produces `benchmark_results.png`.
